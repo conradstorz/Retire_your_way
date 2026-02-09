@@ -74,7 +74,18 @@ Other devices on your network can access at: `http://YOUR_IP_ADDRESS:8501`
 
 See [AUTHENTICATION.md](AUTHENTICATION.md) for detailed multi-user setup instructions.
 
-**Option 3: Deploy to Streamlit Cloud (Free)**
+**Option 3: Deploy to Streamlit Cloud (Share with anyone!)**
+
+1. Push this repo to GitHub (already done! ✅)
+2. Go to [share.streamlit.io](https://share.streamlit.io)
+3. Sign in with GitHub
+4. Click "New app" → Select `conradstorz/Retire_your_way`
+5. Your app goes live at a public URL!
+6. Share the URL with family, friends, or clients
+
+**Each user gets their own isolated account and data.**
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for complete deployment options and instructions.
 
 1. Push this code to a GitHub repository
 2. Go to [share.streamlit.io](https://share.streamlit.io)
