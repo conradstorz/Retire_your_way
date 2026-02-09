@@ -2,6 +2,8 @@
 
 A transparent, easy-to-understand retirement planning tool built with Python and Streamlit. This application replaces complex spreadsheet formulas with clear, documented code that anyone can read, verify, and maintain.
 
+**🆕 Multi-User Support:** Each user has their own secure account with personalized data.
+
 ## Why This Instead of a Spreadsheet?
 
 **Transparency:** All calculations are written in well-documented Python functions. No hidden formulas, no cell reference errors.
@@ -16,6 +18,8 @@ A transparent, easy-to-understand retirement planning tool built with Python and
 
 ## Features
 
+- **Multi-User Authentication:** Secure login system with user registration
+- **Individual Data Persistence:** Each user has their own saved configurations
 - **Interactive Planning:** Adjust your age, savings, contributions, and see results update in real-time
 - **Visual Projections:** Clear charts showing your money growth and retirement spending
 - **Scenario Analysis:** Test different contribution levels and retirement ages
@@ -41,7 +45,7 @@ pip install -r requirements.txt
 
 ### Running the App
 
-**Option 1: Run locally**
+**Option 1: Run locally (single user)**
 
 ```bash
 streamlit run app.py
@@ -49,7 +53,28 @@ streamlit run app.py
 
 The app will open in your browser at `http://localhost:8501`
 
-**Option 2: Deploy to Streamlit Cloud (Free)**
+**Default Login (First Time):**
+- Username: `admin`
+- Password: `admin`
+
+⚠️ **Change the admin password immediately after first login!**
+
+**Option 2: Run on local network (multiple users)**
+
+```bash
+streamlit run app.py --server.address 0.0.0.0
+```
+
+Other devices on your network can access at: `http://YOUR_IP_ADDRESS:8501`
+
+**New User Registration:**
+- Click "New User Registration" on the login page
+- Fill in your details
+- Start planning your retirement!
+
+See [AUTHENTICATION.md](AUTHENTICATION.md) for detailed multi-user setup instructions.
+
+**Option 3: Deploy to Streamlit Cloud (Free)**
 
 1. Push this code to a GitHub repository
 2. Go to [share.streamlit.io](https://share.streamlit.io)

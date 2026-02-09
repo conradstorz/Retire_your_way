@@ -37,6 +37,11 @@ Thumbs.db
 # Streamlit
 .streamlit/secrets.toml
 
+# User data and credentials
+credentials.yaml
+user_data.db
+*.db
+
 # Data files
 *.csv
 *.xlsx

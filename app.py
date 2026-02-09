@@ -1,16 +1,17 @@
 """
-Retirement Planning Application - V2
+Retirement Planning Application - V2 (Multi-User)
 
 A transparent retirement planning tool implementing comprehensive financial modeling
 with multiple account buckets, expense categories, and Social Security integration.
 
-Based on detailed specification for long-term financial simulation.
+Features multi-user authentication with individual data persistence.
 """
 
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import streamlit_authenticator as stauth
 from calculations import (
     AccountBucket,
     ExpenseCategory,
@@ -18,6 +19,18 @@ from calculations import (
     run_comprehensive_projection,
     analyze_retirement_plan
 )
+from auth_config import (
+    load_credentials, 
+    register_new_user, 
+    init_credentials_file,
+    generate_recovery_code,
+    add_recovery_code,
+    add_security_question,
+    get_security_question,
+    reset_password_with_recovery,
+    reset_password_with_security_question
+)
+from user_data import UserDataManager
 
 # Page configuration
 st.set_page_config(
@@ -27,33 +40,323 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Initialize session state for dynamic lists
+# Initialize credentials file
+init_credentials_file()
+
+# Load authentication configuration
+config = load_credentials()
+
+# Create authenticator object
+authenticator = stauth.Authenticate(
+    config['credentials'],
+    config['cookie']['name'],
+    config['cookie']['key'],
+    config['cookie']['expiry_days']
+)
+
+# Authentication
+try:
+    authenticator.login(location='main')
+except Exception as e:
+    st.error(f"Authentication error: {e}")
+    st.stop()
+
+# Get authentication status from session state
+if st.session_state.get("authentication_status"):
+    username = st.session_state["username"]
+    name = st.session_state["name"]
+    authentication_status = st.session_state["authentication_status"]
+else:
+    username = None
+    name = None
+    authentication_status = st.session_state.get("authentication_status", None)
+
+if authentication_status == False:
+    st.error('Username/password is incorrect')
+    
+    # Password Recovery section
+    with st.expander("🔑 Forgot Password? Recover Account"):
+        st.markdown("Reset your password using your recovery code or security question.")
+        
+        recovery_method = st.radio(
+            "Recovery Method:",
+            ["Recovery Code", "Security Question"],
+            horizontal=True
+        )
+        
+        with st.form("password_recovery_form"):
+            recover_username = st.text_input("Username")
+            
+            if recovery_method == "Recovery Code":
+                recovery_code_input = st.text_input("Recovery Code", help="Enter the 16-character code you saved during registration")
+                security_answer = None
+            else:
+                if recover_username:
+                    security_q = get_security_question(recover_username)
+                    if security_q:
+                        st.info(f"**Your Security Question:** {security_q}")
+                        security_answer = st.text_input("Answer")
+                    else:
+                        st.warning("No security question set for this account. Use recovery code instead.")
+                        security_answer = None
+                else:
+                    security_answer = None
+                recovery_code_input = None
+            
+            new_pass = st.text_input("New Password", type="password")
+            new_pass_confirm = st.text_input("Confirm New Password", type="password")
+            
+            recover_button = st.form_submit_button("Reset Password")
+            
+            if recover_button:
+                if not recover_username:
+                    st.error("Please enter your username")
+                elif new_pass != new_pass_confirm:
+                    st.error("Passwords do not match")
+                elif len(new_pass) < 6:
+                    st.error("Password must be at least 6 characters")
+                else:
+                    if recovery_method == "Recovery Code" and recovery_code_input:
+                        if reset_password_with_recovery(recover_username, recovery_code_input, new_pass):
+                            st.success("✅ Password reset successful! Please login with your new password.")
+                            st.balloons()
+                        else:
+                            st.error("Invalid username or recovery code")
+                    elif recovery_method == "Security Question" and security_answer:
+                        if reset_password_with_security_question(recover_username, security_answer, new_pass):
+                            st.success("✅ Password reset successful! Please login with your new password.")
+                            st.balloons()
+                        else:
+                            st.error("Invalid username or security answer")
+                    else:
+                        st.error("Please provide the required recovery information")
+    
+    # Registration section
+    with st.expander("📝 New User Registration"):
+        st.markdown("Create a new account to start planning your retirement.")
+        
+        with st.form("registration_form"):
+            new_username = st.text_input("Username")
+            new_name = st.text_input("Full Name")
+            new_email = st.text_input("Email")
+            new_password = st.text_input("Password", type="password")
+            new_password_confirm = st.text_input("Confirm Password", type="password")
+            
+            st.divider()
+            st.markdown("**🔐 Account Recovery Setup** (Optional but recommended)")
+            
+            # Security question
+            security_questions = [
+                "What was the name of your first pet?",
+                "What city were you born in?",
+                "What is your mother's maiden name?",
+                "What was the name of your first school?",
+                "What is your favorite book?",
+                "What was your childhood nickname?"
+            ]
+            security_question = st.selectbox("Security Question (optional)", [""] + security_questions)
+            security_answer = st.text_input("Answer (optional)", help="Answer is case-insensitive") if security_question else ""
+            
+            submit_button = st.form_submit_button("Register")
+            
+            if submit_button:
+                if not all([new_username, new_name, new_email, new_password]):
+                    st.error("All fields are required")
+                elif new_password != new_password_confirm:
+                    st.error("Passwords do not match")
+                elif len(new_password) < 6:
+                    st.error("Password must be at least 6 characters")
+                else:
+                    if register_new_user(new_username, new_name, new_password, new_email):
+                        # Generate and display recovery code
+                        recovery_code = generate_recovery_code()
+                        add_recovery_code(new_username, recovery_code)
+                        
+                        # Add security question if provided
+                        if security_question and security_answer:
+                            add_security_question(new_username, security_question, security_answer)
+                        
+                        st.success("✅ Registration successful!")
+                        st.info(f"""
+                        **🔑 Your Recovery Code:** `{recovery_code}`
+                        
+                        **⚠️ IMPORTANT:** Save this code in a secure place!
+                        You can use it to reset your password if you forget it.
+                        This code will not be shown again.
+                        """)
+                        
+                        if security_question:
+                            st.success("✅ Security question set successfully!")
+                        
+                        st.markdown("**You can now login with your credentials.**")
+                    else:
+                        st.error("Username already exists")
+    
+    st.stop()
+
+elif authentication_status == None:
+    st.warning('Please enter your username and password')
+    
+    # Password Recovery section
+    with st.expander("🔑 Forgot Password? Recover Account"):
+        st.markdown("Reset your password using your recovery code or security question.")
+        
+        recovery_method = st.radio(
+            "Recovery Method:",
+            ["Recovery Code", "Security Question"],
+            horizontal=True,
+            key="recovery_method_none"
+        )
+        
+        with st.form("password_recovery_form_none"):
+            recover_username = st.text_input("Username")
+            
+            if recovery_method == "Recovery Code":
+                recovery_code_input = st.text_input("Recovery Code", help="Enter the 16-character code you saved during registration")
+                security_answer = None
+            else:
+                if recover_username:
+                    security_q = get_security_question(recover_username)
+                    if security_q:
+                        st.info(f"**Your Security Question:** {security_q}")
+                        security_answer = st.text_input("Answer")
+                    else:
+                        st.warning("No security question set for this account. Use recovery code instead.")
+                        security_answer = None
+                else:
+                    security_answer = None
+                recovery_code_input = None
+            
+            new_pass = st.text_input("New Password", type="password")
+            new_pass_confirm = st.text_input("Confirm New Password", type="password")
+            
+            recover_button = st.form_submit_button("Reset Password")
+            
+            if recover_button:
+                if not recover_username:
+                    st.error("Please enter your username")
+                elif new_pass != new_pass_confirm:
+                    st.error("Passwords do not match")
+                elif len(new_pass) < 6:
+                    st.error("Password must be at least 6 characters")
+                else:
+                    if recovery_method == "Recovery Code" and recovery_code_input:
+                        if reset_password_with_recovery(recover_username, recovery_code_input, new_pass):
+                            st.success("✅ Password reset successful! Please login with your new password.")
+                            st.balloons()
+                        else:
+                            st.error("Invalid username or recovery code")
+                    elif recovery_method == "Security Question" and security_answer:
+                        if reset_password_with_security_question(recover_username, security_answer, new_pass):
+                            st.success("✅ Password reset successful! Please login with your new password.")
+                            st.balloons()
+                        else:
+                            st.error("Invalid username or security answer")
+                    else:
+                        st.error("Please provide the required recovery information")
+    
+    # Registration section
+    with st.expander("📝 New User Registration"):
+        st.markdown("Create a new account to start planning your retirement.")
+        
+        with st.form("registration_form_none"):
+            new_username = st.text_input("Username")
+            new_name = st.text_input("Full Name")
+            new_email = st.text_input("Email")
+            new_password = st.text_input("Password", type="password")
+            new_password_confirm = st.text_input("Confirm Password", type="password")
+            
+            st.divider()
+            st.markdown("**🔐 Account Recovery Setup** (Optional but recommended)")
+            
+            # Security question
+            security_questions = [
+                "What was the name of your first pet?",
+                "What city were you born in?",
+                "What is your mother's maiden name?",
+                "What was the name of your first school?",
+                "What is your favorite book?",
+                "What was your childhood nickname?"
+            ]
+            security_question = st.selectbox("Security Question (optional)", [""] + security_questions)
+            security_answer = st.text_input("Answer (optional)", help="Answer is case-insensitive") if security_question else ""
+            
+            submit_button = st.form_submit_button("Register")
+            
+            if submit_button:
+                if not all([new_username, new_name, new_email, new_password]):
+                    st.error("All fields are required")
+                elif new_password != new_password_confirm:
+                    st.error("Passwords do not match")
+                elif len(new_password) < 6:
+                    st.error("Password must be at least 6 characters")
+                else:
+                    if register_new_user(new_username, new_name, new_password, new_email):
+                        # Generate and display recovery code
+                        recovery_code = generate_recovery_code()
+                        add_recovery_code(new_username, recovery_code)
+                        
+                        # Add security question if provided
+                        if security_question and security_answer:
+                            add_security_question(new_username, security_question, security_answer)
+                        
+                        st.success("✅ Registration successful!")
+                        st.info(f"""
+                        **🔑 Your Recovery Code:** `{recovery_code}`
+                        
+                        **⚠️ IMPORTANT:** Save this code in a secure place!
+                        You can use it to reset your password if you forget it.
+                        This code will not be shown again.
+                        """)
+                        
+                        if security_question:
+                            st.success("✅ Security question set successfully!")
+                        
+                        st.markdown("**You can now login with your credentials.**")
+                    else:
+                        st.error("Username already exists")
+    
+    st.stop()
+
+# ===== USER IS AUTHENTICATED =====
+
+# Initialize user data manager
+db_manager = UserDataManager()
+
+# Load user-specific data or create defaults
+if not db_manager.user_exists(username):
+    db_manager.create_default_data_for_user(username)
+
+# Load user's saved data
+user_profile = db_manager.load_user_profile(username)
+user_accounts = db_manager.load_user_accounts(username)
+user_expenses = db_manager.load_user_expenses(username)
+user_events = db_manager.load_user_events(username)
+
+# Initialize session state for dynamic lists if not already set
 if 'expense_categories' not in st.session_state:
-    st.session_state.expense_categories = [
-        {'name': 'Housing', 'amount': 24000, 'type': 'CORE'},
-        {'name': 'Food', 'amount': 12000, 'type': 'CORE'},
-        {'name': 'Healthcare', 'amount': 8000, 'type': 'CORE'},
-        {'name': 'Transportation', 'amount': 6000, 'type': 'CORE'},
-        {'name': 'Travel', 'amount': 10000, 'type': 'FLEX'},
-        {'name': 'Entertainment', 'amount': 5000, 'type': 'FLEX'},
-    ]
+    st.session_state.expense_categories = user_expenses
 
 if 'accounts' not in st.session_state:
-    st.session_state.accounts = [
-        {'name': '401k', 'balance': 200000, 'return': 0.07, 'contrib_share': 0.80, 'priority': 1},
-        {'name': 'Roth IRA', 'balance': 50000, 'return': 0.07, 'contrib_share': 0.20, 'priority': 2},
-    ]
+    st.session_state.accounts = user_accounts
 
 if 'events' not in st.session_state:
-    st.session_state.events = []
+    st.session_state.events = user_events
 
-# Title
+if 'data_loaded' not in st.session_state:
+    st.session_state.data_loaded = True
+
+# Title with user greeting
 st.title("💰 Retirement Planning Calculator V2")
+st.markdown(f"**Welcome back, {name}!** | *Logged in as: {username}*")
 st.markdown("""
 **Transparent, Multi-Account, Long-Term Financial Simulation**
 
 All calculations are documented in clear Python code. No hidden formulas.
 """)
+
+# Logout button in sidebar
+authenticator.logout(location='sidebar')
 
 # ===== SIDEBAR: PROFILE & ASSUMPTIONS =====
 
@@ -63,7 +366,7 @@ current_age = st.sidebar.number_input(
     "Current Age",
     min_value=18,
     max_value=100,
-    value=45,
+    value=int(user_profile['current_age']),
     help="Your age today"
 )
 
@@ -71,7 +374,7 @@ target_age = st.sidebar.number_input(
     "Target Age (Goal)",
     min_value=current_age + 1,
     max_value=120,
-    value=90,
+    value=int(user_profile['target_age']),
     help="Age you want to ensure money lasts until"
 )
 
@@ -83,14 +386,14 @@ work_end_age = st.sidebar.number_input(
     "Work End Age",
     min_value=current_age,
     max_value=100,
-    value=65,
+    value=int(user_profile['work_end_age']),
     help="Age when you stop working"
 )
 
 current_work_income = st.sidebar.number_input(
     "Current Annual Work Income ($)",
     min_value=0,
-    value=80000,
+    value=int(user_profile['current_work_income']),
     step=5000,
     help="Current annual salary/income"
 )
@@ -99,7 +402,7 @@ work_income_growth = st.sidebar.slider(
     "Annual Income Growth (%)",
     min_value=-10.0,
     max_value=10.0,
-    value=2.0,
+    value=float(user_profile['work_income_growth'] * 100),
     step=0.5,
     help="Expected annual salary increase (or decrease)"
 ) / 100
@@ -112,14 +415,14 @@ ss_start_age = st.sidebar.number_input(
     "SS Start Age",
     min_value=62,
     max_value=70,
-    value=67,
+    value=int(user_profile['ss_start_age']),
     help="Age when you start claiming Social Security"
 )
 
 ss_monthly_benefit = st.sidebar.number_input(
     "SS Monthly Benefit ($)",
     min_value=0,
-    value=2500,
+    value=int(user_profile['ss_monthly_benefit']),
     step=100,
     help="Expected monthly Social Security benefit"
 )
@@ -128,7 +431,7 @@ ss_cola = st.sidebar.slider(
     "SS COLA (%)",
     min_value=0.0,
     max_value=5.0,
-    value=2.5,
+    value=float(user_profile['ss_cola'] * 100),
     step=0.1,
     help="Social Security cost of living adjustment"
 ) / 100
@@ -141,7 +444,7 @@ inflation_rate = st.sidebar.slider(
     "Inflation Rate (%)",
     min_value=0.0,
     max_value=10.0,
-    value=3.0,
+    value=float(user_profile['inflation_rate'] * 100),
     step=0.5
 ) / 100
 
@@ -149,10 +452,34 @@ max_flex_reduction = st.sidebar.slider(
     "Max Flexible Spending Cut (%)",
     min_value=0.0,
     max_value=100.0,
-    value=50.0,
+    value=float(user_profile['max_flex_reduction'] * 100),
     step=5.0,
     help="Maximum reduction allowed for flexible expenses before withdrawing from portfolio"
 ) / 100
+
+# Save button
+st.sidebar.divider()
+if st.sidebar.button("💾 Save My Configuration", type="primary"):
+    # Save profile
+    profile_data = {
+        'current_age': current_age,
+        'target_age': target_age,
+        'work_end_age': work_end_age,
+        'current_work_income': current_work_income,
+        'work_income_growth': work_income_growth,
+        'ss_start_age': ss_start_age,
+        'ss_monthly_benefit': ss_monthly_benefit,
+        'ss_cola': ss_cola,
+        'inflation_rate': inflation_rate,
+        'max_flex_reduction': max_flex_reduction
+    }
+    db_manager.save_user_profile(username, profile_data)
+    db_manager.save_user_accounts(username, st.session_state.accounts)
+    db_manager.save_user_expenses(username, st.session_state.expense_categories)
+    db_manager.save_user_events(username, st.session_state.events)
+    
+    st.sidebar.success("✅ Configuration saved!")
+    st.balloons()
 
 # ===== MAIN CONTENT: CONFIGURATION SECTIONS =====
 
