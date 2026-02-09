@@ -174,7 +174,20 @@ This is your personal project, but if you want to:
 
 ## License
 
-This is your personal tool - use and modify however you like!
+This project is licensed under the **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0)**.
+
+**You are free to:**
+- Use this software for personal, non-commercial retirement planning
+- Share and modify the code
+- Build upon it for your own use
+
+**You may NOT:**
+- Use this software for commercial purposes without explicit written permission
+- Remove attribution or license information
+
+See the [LICENSE](LICENSE) file for full details.
+
+For commercial licensing inquiries, contact: https://github.com/conradstorz
 
 ## Support
 
