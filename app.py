@@ -372,7 +372,19 @@ Please reach out with feedback!
 """)
 
 # ===== RUN PROJECTION =====
-# Run this early so dashboard and projections tab both have the data
+# Run this early so dashboard and projections tab both have the data.
+# Profile values come from the saved user_profile. The Profile tab lets
+# the user edit and save new values, which take effect on the next rerun.
+
+current_age = int(user_profile['current_age'])
+target_age = int(user_profile['target_age'])
+work_end_age = int(user_profile['work_end_age'])
+current_work_income = int(user_profile['current_work_income'])
+ss_start_age = int(user_profile['ss_start_age'])
+ss_monthly_benefit = int(user_profile['ss_monthly_benefit'])
+ss_cola = float(user_profile['ss_cola'])
+inflation_rate = float(user_profile['inflation_rate'])
+max_flex_reduction = float(user_profile['max_flex_reduction'])
 
 # Build data structures for calculation
 accounts = [
