@@ -25,7 +25,7 @@ Streamlit Cloud is the easiest way to deploy your app publicly or privately.
 
 3. **Your App Will Be Live At:**
    ```
-   https://retire-your-way-[random-string].streamlit.app
+   https://yourmoney.streamlit.app
    ```
 
 4. **Share the URL**
