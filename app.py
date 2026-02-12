@@ -354,19 +354,22 @@ if 'events' not in st.session_state:
 if 'data_loaded' not in st.session_state:
     st.session_state.data_loaded = True
 
-# Title with user greeting
-st.title("💰 Retirement Planning Calculator V2")
+# Title with user greeting and logout button on same row
+title_col, logout_col = st.columns([4, 1])
+with title_col:
+    st.title("💰 Retirement Planning Calculator V2")
+with logout_col:
+    st.write("")  # Vertical spacing to align with title
+    authenticator.logout(location='main')
+
 st.markdown(f"**Welcome back, {name}!** | *Logged in as: {username}*")
 st.markdown("""
 **Transparent, Long-Term Financial Simulation**
 
 This is a work-in-progress. Please ignore the icon buttons at the top right of the page. They are links to my developement code repository.
-I appologise for changes to the apperance from day to day. 
+I appologise for changes to the apperance from day to day.
 Please reach out with feedback!
 """)
-
-# Logout button in sidebar
-authenticator.logout(location='sidebar')
 
 # ===== MAIN CONTENT: CONFIGURATION SECTIONS =====
 
