@@ -189,6 +189,9 @@ if authentication_status == False:
                             st.success("✅ Security question set successfully!")
                         
                         st.markdown("**You can now login with your credentials.**")
+                        
+                        if st.button("🔐 Return to Login Page", type="primary", key="return_login_1"):
+                            st.rerun()
                     else:
                         st.error("Username already exists")
     
@@ -313,6 +316,9 @@ elif authentication_status == None:
                             st.success("✅ Security question set successfully!")
                         
                         st.markdown("**You can now login with your credentials.**")
+                        
+                        if st.button("🔐 Return to Login Page", type="primary", key="return_login_2"):
+                            st.rerun()
                     else:
                         st.error("Username already exists")
     
@@ -352,7 +358,7 @@ st.markdown(f"**Welcome back, {name}!** | *Logged in as: {username}*")
 st.markdown("""
 **Transparent, Long-Term Financial Simulation**
 
-This is a work-in-progress. 
+This is a work-in-progress. Please ignore the icon buttons at the top right of the page. They are links to my developement code repository.
 I appologise for changes to the apperance from day to day. 
 Please reach out with feedback!
 """)
@@ -1013,7 +1019,5 @@ with proj_tabs[3]:
 # Footer
 st.divider()
 st.caption("""
-💡 **Transparency by Design:** All calculations are visible in the source code.
-No hidden spreadsheet formulas. Fully auditable and customizable.
-This is your living financial control panel - update it annually and refine over time.
+💡 This is your living financial control panel - update it annually and refine over time.
 """)
