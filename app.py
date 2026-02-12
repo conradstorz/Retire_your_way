@@ -350,9 +350,11 @@ if 'data_loaded' not in st.session_state:
 st.title("💰 Retirement Planning Calculator V2")
 st.markdown(f"**Welcome back, {name}!** | *Logged in as: {username}*")
 st.markdown("""
-**Transparent, Multi-Account, Long-Term Financial Simulation**
+**Transparent, Long-Term Financial Simulation**
 
-All calculations are documented in clear Python code. No hidden formulas.
+This is a work-in-progress. 
+I appologise for changes to the apperance from day to day. 
+Please reach out with feedback!
 """)
 
 # Logout button in sidebar
@@ -364,8 +366,8 @@ st.sidebar.header("📋 Profile")
 
 current_age = st.sidebar.number_input(
     "Current Age",
-    min_value=18,
-    max_value=100,
+    min_value=1,
+    max_value=130,
     value=int(user_profile['current_age']),
     help="Your age today"
 )
@@ -373,7 +375,7 @@ current_age = st.sidebar.number_input(
 target_age = st.sidebar.number_input(
     "Target Age (Goal)",
     min_value=current_age + 1,
-    max_value=120,
+    max_value=130,
     value=int(user_profile['target_age']),
     help="Age you want to ensure money lasts until"
 )
