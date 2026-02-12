@@ -600,7 +600,7 @@ with config_tabs[0]:
 
                 st.dataframe(
                     pd.DataFrame(display_rows),
-                    use_container_width=True,
+                    width='stretch',
                     hide_index=True
                 )
 
