@@ -575,26 +575,31 @@ with config_tabs[0]:
                         'Total Value': f"${snap['total_value']:,.0f}",
                     }
                     if s_idx == 0:
-                        row['Growth'] = 'N/A'
-                        row['Growth %'] = 'N/A'
-                        row['ROI %'] = 'N/A'
+                        # First snapshot is the baseline; no previous to compare
+                        row['Invest. Gain'] = 'N/A (baseline)'
+                        row['Total Change %'] = 'N/A'
+                        row['Invest. Return %'] = 'N/A'
                     else:
                         prev = snapshots[s_idx - 1]
-                        growth = (snap['total_value'] - prev['total_value']
-                                  - snap['contributed'])
+                        # Investment gain = how much the investments earned,
+                        # separate from money the user put in
+                        invest_gain = (snap['total_value'] - prev['total_value']
+                                       - snap['contributed'])
                         days = (datetime.strptime(snap['date'], '%Y-%m-%d')
                                 - datetime.strptime(prev['date'], '%Y-%m-%d')).days
                         annualize = 365 / days if days > 0 else 1
                         prev_val = prev['total_value']
 
-                        row['Growth'] = f"${growth:,.0f}"
+                        row['Invest. Gain'] = f"${invest_gain:,.0f}"
                         if prev_val > 0:
                             total_change = snap['total_value'] - prev_val
-                            row['Growth %'] = f"{(total_change / prev_val) * annualize * 100:.1f}%"
-                            row['ROI %'] = f"{(growth / prev_val) * annualize * 100:.1f}%"
+                            row['Total Change %'] = (
+                                f"{(total_change / prev_val) * annualize * 100:.1f}% ann.")
+                            row['Invest. Return %'] = (
+                                f"{(invest_gain / prev_val) * annualize * 100:.1f}% ann.")
                         else:
-                            row['Growth %'] = 'N/A'
-                            row['ROI %'] = 'N/A'
+                            row['Total Change %'] = 'N/A'
+                            row['Invest. Return %'] = 'N/A'
 
                     display_rows.append(row)
 
@@ -604,6 +609,15 @@ with config_tabs[0]:
                     hide_index=True
                 )
 
+                # Delete snapshot buttons
+                for s_idx, snap in enumerate(snapshots):
+                    if st.button(
+                        f"Delete {snap['date']} snapshot",
+                        key=f"del_snap_{i}_{s_idx}"
+                    ):
+                        db_manager.delete_snapshot(username, snap['id'])
+                        st.rerun()
+
                 # Auto-update balance from most recent snapshot
                 latest_value = snapshots[-1]['total_value']
                 if abs(acc['balance'] - latest_value) > 0.01:
@@ -611,44 +625,42 @@ with config_tabs[0]:
             else:
                 st.caption("No snapshots recorded yet. Add one below to start tracking performance.")
 
-            # Add snapshot form
-            with st.form(key=f"snapshot_form_{i}"):
-                st.caption("Record a new snapshot")
-                snap_cols = st.columns(3)
-                with snap_cols[0]:
-                    snap_date = st.date_input(
-                        "Date",
-                        value=date.today(),
-                        key=f"snap_date_{i}"
-                    )
-                with snap_cols[1]:
-                    snap_contributed = st.number_input(
-                        "Amount Contributed ($)",
-                        min_value=0,
-                        value=0,
-                        step=500,
-                        key=f"snap_contrib_{i}",
-                        help="Amount contributed since last snapshot"
-                    )
-                with snap_cols[2]:
-                    snap_value = st.number_input(
-                        "Total Account Value ($)",
-                        min_value=0,
-                        value=int(acc['balance']),
-                        step=1000,
-                        key=f"snap_value_{i}",
-                        help="Current total value of this account"
-                    )
+            # Add snapshot — no st.form, so Enter won't accidentally save
+            st.markdown("**Record a new snapshot**")
+            snap_cols = st.columns(3)
+            with snap_cols[0]:
+                snap_date = st.date_input(
+                    "Date",
+                    value=date.today(),
+                    key=f"snap_date_{i}"
+                )
+            with snap_cols[1]:
+                snap_contributed = st.number_input(
+                    "Contributed Since Last Snapshot ($)",
+                    min_value=0,
+                    value=0,
+                    step=500,
+                    key=f"snap_contrib_{i}",
+                    help="Money you added to this account since the last snapshot"
+                )
+            with snap_cols[2]:
+                snap_value = st.number_input(
+                    "Total Account Value ($)",
+                    min_value=0,
+                    value=int(acc['balance']),
+                    step=1000,
+                    key=f"snap_value_{i}",
+                    help="Current total value of this account"
+                )
 
-                if st.form_submit_button("Add Snapshot"):
-                    db_manager.save_snapshot(
-                        username, acc['name'],
-                        snap_date.isoformat(),
-                        snap_contributed, snap_value
-                    )
-                    # Update balance to match new snapshot
-                    acc['balance'] = snap_value
-                    st.rerun()
+            if st.button("Save Snapshot", key=f"save_snap_{i}"):
+                db_manager.save_snapshot(
+                    username, acc['name'],
+                    snap_date.isoformat(),
+                    snap_contributed, snap_value
+                )
+                acc['balance'] = snap_value
+                st.rerun()
 
             if st.button(f"Remove {acc['name']}", key=f"remove_acc_{i}"):
                 st.session_state.accounts.pop(i)
