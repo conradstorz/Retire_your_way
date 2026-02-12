@@ -368,120 +368,6 @@ Please reach out with feedback!
 # Logout button in sidebar
 authenticator.logout(location='sidebar')
 
-# ===== SIDEBAR: PROFILE & ASSUMPTIONS =====
-
-st.sidebar.header("📋 Profile")
-
-current_age = st.sidebar.number_input(
-    "Current Age",
-    min_value=1,
-    max_value=130,
-    value=int(user_profile['current_age']),
-    help="Your age today"
-)
-
-target_age = st.sidebar.number_input(
-    "Target Age (Goal)",
-    min_value=current_age + 1,
-    max_value=130,
-    value=int(user_profile['target_age']),
-    help="Age you want to ensure money lasts until"
-)
-
-st.sidebar.divider()
-
-st.sidebar.header("💼 Work Income")
-
-work_end_age = st.sidebar.number_input(
-    "Work End Age",
-    min_value=current_age,
-    max_value=100,
-    value=int(user_profile['work_end_age']),
-    help="Age when you stop working"
-)
-
-current_work_income = st.sidebar.number_input(
-    "Current Annual Work Income ($)",
-    min_value=0,
-    value=int(user_profile['current_work_income']),
-    step=5000,
-    help="Current annual salary/income (projected to grow at inflation rate)"
-)
-
-st.sidebar.divider()
-
-st.sidebar.header("🏛️ Social Security")
-
-ss_start_age = st.sidebar.number_input(
-    "SS Start Age",
-    min_value=62,
-    max_value=70,
-    value=int(user_profile['ss_start_age']),
-    help="Age when you start claiming Social Security"
-)
-
-ss_monthly_benefit = st.sidebar.number_input(
-    "SS Monthly Benefit ($)",
-    min_value=0,
-    value=int(user_profile['ss_monthly_benefit']),
-    step=100,
-    help="Expected monthly Social Security benefit"
-)
-
-ss_cola = st.sidebar.slider(
-    "SS COLA (%)",
-    min_value=0.0,
-    max_value=5.0,
-    value=float(user_profile['ss_cola'] * 100),
-    step=0.1,
-    help="Social Security cost of living adjustment"
-) / 100
-
-st.sidebar.divider()
-
-st.sidebar.header("📊 Assumptions")
-
-inflation_rate = st.sidebar.slider(
-    "Inflation Rate (%)",
-    min_value=0.0,
-    max_value=10.0,
-    value=float(user_profile['inflation_rate'] * 100),
-    step=0.5
-) / 100
-
-max_flex_reduction = st.sidebar.slider(
-    "Max Flexible Spending Cut (%)",
-    min_value=0.0,
-    max_value=100.0,
-    value=float(user_profile['max_flex_reduction'] * 100),
-    step=5.0,
-    help="Maximum reduction allowed for flexible expenses before withdrawing from portfolio"
-) / 100
-
-# Save button
-st.sidebar.divider()
-if st.sidebar.button("💾 Save My Configuration", type="primary"):
-    # Save profile
-    profile_data = {
-        'current_age': current_age,
-        'target_age': target_age,
-        'work_end_age': work_end_age,
-        'current_work_income': current_work_income,
-        'work_income_growth': 0,
-        'ss_start_age': ss_start_age,
-        'ss_monthly_benefit': ss_monthly_benefit,
-        'ss_cola': ss_cola,
-        'inflation_rate': inflation_rate,
-        'max_flex_reduction': max_flex_reduction
-    }
-    db_manager.save_user_profile(username, profile_data)
-    db_manager.save_user_accounts(username, st.session_state.accounts)
-    db_manager.save_user_expenses(username, st.session_state.expense_categories)
-    db_manager.save_user_events(username, st.session_state.events)
-    
-    st.sidebar.success("✅ Configuration saved!")
-    st.balloons()
-
 # ===== MAIN CONTENT: CONFIGURATION SECTIONS =====
 
 st.header("⚙️ Configuration")
@@ -513,10 +399,110 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-config_tabs = st.tabs(["💰 Accounts", "🏠 Expenses", "📅 One-Time Events"])
+config_tabs = st.tabs(["📋 Profile", "💰 Accounts", "🏠 Expenses", "📅 One-Time Events"])
+
+# --- PROFILE TAB ---
+with config_tabs[0]:
+    st.subheader("Personal Profile")
+
+    prof_col1, prof_col2 = st.columns(2)
+
+    with prof_col1:
+        st.markdown("**Age & Retirement**")
+        current_age = st.number_input(
+            "Current Age",
+            min_value=1,
+            max_value=130,
+            value=int(user_profile['current_age']),
+            help="Your age today"
+        )
+        target_age = st.number_input(
+            "Target Age (Goal)",
+            min_value=current_age + 1,
+            max_value=130,
+            value=int(user_profile['target_age']),
+            help="Age you want to ensure money lasts until"
+        )
+        work_end_age = st.number_input(
+            "Work End Age",
+            min_value=current_age,
+            max_value=100,
+            value=int(user_profile['work_end_age']),
+            help="Age when you stop working"
+        )
+        current_work_income = st.number_input(
+            "Current Annual Work Income ($)",
+            min_value=0,
+            value=int(user_profile['current_work_income']),
+            step=5000,
+            help="Current annual salary/income (projected to grow at inflation rate)"
+        )
+
+    with prof_col2:
+        st.markdown("**Social Security**")
+        ss_start_age = st.number_input(
+            "SS Start Age",
+            min_value=62,
+            max_value=70,
+            value=int(user_profile['ss_start_age']),
+            help="Age when you start claiming Social Security"
+        )
+        ss_monthly_benefit = st.number_input(
+            "SS Monthly Benefit ($)",
+            min_value=0,
+            value=int(user_profile['ss_monthly_benefit']),
+            step=100,
+            help="Expected monthly Social Security benefit"
+        )
+        ss_cola = st.slider(
+            "SS COLA (%)",
+            min_value=0.0,
+            max_value=5.0,
+            value=float(user_profile['ss_cola'] * 100),
+            step=0.1,
+            help="Social Security cost of living adjustment"
+        ) / 100
+
+        st.markdown("**Assumptions**")
+        inflation_rate = st.slider(
+            "Inflation Rate (%)",
+            min_value=0.0,
+            max_value=10.0,
+            value=float(user_profile['inflation_rate'] * 100),
+            step=0.5
+        ) / 100
+        max_flex_reduction = st.slider(
+            "Max Flexible Spending Cut (%)",
+            min_value=0.0,
+            max_value=100.0,
+            value=float(user_profile['max_flex_reduction'] * 100),
+            step=5.0,
+            help="Maximum reduction allowed for flexible expenses before withdrawing from portfolio"
+        ) / 100
+
+    st.divider()
+    if st.button("💾 Save All Configuration", type="primary"):
+        profile_data = {
+            'current_age': current_age,
+            'target_age': target_age,
+            'work_end_age': work_end_age,
+            'current_work_income': current_work_income,
+            'work_income_growth': 0,
+            'ss_start_age': ss_start_age,
+            'ss_monthly_benefit': ss_monthly_benefit,
+            'ss_cola': ss_cola,
+            'inflation_rate': inflation_rate,
+            'max_flex_reduction': max_flex_reduction
+        }
+        db_manager.save_user_profile(username, profile_data)
+        db_manager.save_user_accounts(username, st.session_state.accounts)
+        db_manager.save_user_expenses(username, st.session_state.expense_categories)
+        db_manager.save_user_events(username, st.session_state.events)
+        st.success("Configuration saved!")
+        st.balloons()
 
 # --- ACCOUNTS TAB ---
-with config_tabs[0]:
+with config_tabs[1]:
     st.subheader("Investment Accounts")
     st.caption("Each account has a type (which controls contribution rules), a planned annual "
                "contribution, and a withdrawal priority. Deficits withdraw in priority order (1 = first).")
@@ -714,7 +700,7 @@ with config_tabs[0]:
     col2.info(f"**Total Planned Contributions: ${total_planned:,.0f}/year**")
 
 # --- EXPENSES TAB ---
-with config_tabs[1]:
+with config_tabs[2]:
     st.subheader("Expense Categories")
     st.caption("CORE expenses cannot be reduced. FLEX expenses can be cut up to the max % if needed.")
     
@@ -770,7 +756,7 @@ with config_tabs[1]:
     col3.metric("Total Expenses", f"${total_expenses:,.0f}/year")
 
 # --- EVENTS TAB ---
-with config_tabs[2]:
+with config_tabs[3]:
     st.subheader("One-Time Financial Events")
     st.caption("Positive amounts = expenses. Negative amounts = windfalls.")
     
