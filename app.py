@@ -371,7 +371,109 @@ I appologise for changes to the apperance from day to day.
 Please reach out with feedback!
 """)
 
-# ===== MAIN CONTENT: CONFIGURATION SECTIONS =====
+# ===== RUN PROJECTION =====
+# Run this early so dashboard and projections tab both have the data
+
+# Build data structures for calculation
+accounts = [
+    AccountBucket(
+        name=acc['name'],
+        balance=acc['balance'],
+        annual_return=acc['return'],
+        priority=acc['priority'],
+        account_type=acc.get('account_type', 'taxable_brokerage'),
+        planned_contribution=acc.get('planned_contribution', 0)
+    )
+    for acc in st.session_state.accounts
+]
+
+expenses = [
+    ExpenseCategory(
+        name=exp['name'],
+        annual_amount=exp['amount'],
+        category_type=exp['type']
+    )
+    for exp in st.session_state.expense_categories
+]
+
+events = [
+    OneTimeEvent(
+        year=evt['year'],
+        description=evt['description'],
+        amount=evt['amount']
+    )
+    for evt in st.session_state.events
+]
+
+projection = run_comprehensive_projection(
+    current_age=current_age,
+    target_age=target_age,
+    current_work_income=current_work_income,
+    work_end_age=work_end_age,
+    ss_start_age=ss_start_age,
+    ss_monthly_benefit=ss_monthly_benefit,
+    ss_cola=ss_cola,
+    accounts=accounts,
+    expense_categories=expenses,
+    max_flex_reduction=max_flex_reduction,
+    events=events,
+    inflation_rate=inflation_rate,
+    max_age=110
+)
+
+analysis = analyze_retirement_plan(projection, target_age=target_age)
+
+# ===== DASHBOARD =====
+
+st.header("📊 Dashboard")
+
+col1, col2, col3, col4, col5 = st.columns(5)
+
+with col1:
+    st.metric(
+        "Status",
+        analysis['status'],
+        delta="Good" if analysis['status'] == 'ON TRACK' else "Warning"
+    )
+
+with col2:
+    st.metric(
+        "Target Age",
+        target_age
+    )
+
+with col3:
+    if analysis['run_out_age']:
+        st.metric(
+            "Money Lasts Until",
+            f"Age {analysis['run_out_age']}"
+        )
+    else:
+        st.metric(
+            "Money Lasts Until",
+            "Age 110+"
+        )
+
+with col4:
+    cushion = analysis['cushion_years']
+    st.metric(
+        "Cushion",
+        f"{cushion} years",
+        delta="Good" if cushion >= 0 else "Short"
+    )
+
+with col5:
+    st.metric(
+        "Final Balance",
+        f"${analysis['final_balance']:,.0f}"
+    )
+
+if analysis['warnings']:
+    st.warning("**Warnings:**\n\n" + "\n\n".join(f"- {w}" for w in analysis['warnings']))
+else:
+    st.success("No warnings detected. Plan looks solid!")
+
+# ===== CONFIGURATION & PROJECTIONS =====
 
 st.header("⚙️ Configuration")
 
@@ -402,7 +504,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-config_tabs = st.tabs(["📋 Profile", "💰 Accounts", "🏠 Expenses", "📅 One-Time Events"])
+config_tabs = st.tabs(["📋 Profile", "💰 Accounts", "🏠 Expenses", "📅 One-Time Events", "📈 Projections"])
 
 # --- PROFILE TAB ---
 with config_tabs[0]:
@@ -805,132 +907,20 @@ with config_tabs[3]:
         })
         st.rerun()
 
-# ===== RUN PROJECTION =====
-
-st.divider()
-
-# Build data structures for calculation
-accounts = [
-    AccountBucket(
-        name=acc['name'],
-        balance=acc['balance'],
-        annual_return=acc['return'],
-        priority=acc['priority'],
-        account_type=acc.get('account_type', 'taxable_brokerage'),
-        planned_contribution=acc.get('planned_contribution', 0)
-    )
-    for acc in st.session_state.accounts
-]
-
-expenses = [
-    ExpenseCategory(
-        name=exp['name'],
-        annual_amount=exp['amount'],
-        category_type=exp['type']
-    )
-    for exp in st.session_state.expense_categories
-]
-
-events = [
-    OneTimeEvent(
-        year=evt['year'],
-        description=evt['description'],
-        amount=evt['amount']
-    )
-    for evt in st.session_state.events
-]
-
-# Run projection
-projection = run_comprehensive_projection(
-    current_age=current_age,
-    target_age=target_age,
-    current_work_income=current_work_income,
-    work_end_age=work_end_age,
-    ss_start_age=ss_start_age,
-    ss_monthly_benefit=ss_monthly_benefit,
-    ss_cola=ss_cola,
-    accounts=accounts,
-    expense_categories=expenses,
-    max_flex_reduction=max_flex_reduction,
-    events=events,
-    inflation_rate=inflation_rate,
-    max_age=110
-)
-
-# Analyze results
-analysis = analyze_retirement_plan(projection, target_age=target_age)
-
-# ===== DASHBOARD =====
-
-st.header("📊 Dashboard")
-
-# Headline metrics
-col1, col2, col3, col4, col5 = st.columns(5)
-
-with col1:
-    st.metric(
-        "Status",
-        analysis['status'],
-        delta="✅" if analysis['status'] == 'ON TRACK' else "⚠️"
-    )
-
-with col2:
-    st.metric(
-        "Target Age",
-        target_age
-    )
-
-with col3:
-    if analysis['run_out_age']:
-        st.metric(
-            "Money Lasts Until",
-            f"Age {analysis['run_out_age']}"
-        )
-    else:
-        st.metric(
-            "Money Lasts Until",
-            "Age 110+"
-        )
-
-with col4:
-    cushion = analysis['cushion_years']
-    st.metric(
-        "Cushion",
-        f"{cushion} years",
-        delta="Good" if cushion >= 0 else "Short"
-    )
-
-with col5:
-    st.metric(
-        "Final Balance",
-        f"${analysis['final_balance']:,.0f}"
-    )
-
-# Warnings
-if analysis['warnings']:
-    st.warning("**⚠️ Warnings:**\n\n" + "\n\n".join(f"• {w}" for w in analysis['warnings']))
-else:
-    st.success("✅ No warnings detected. Plan looks solid!")
-
-# ===== DETAILED PROJECTIONS =====
-
-st.header("📈 Projections")
-
-proj_tabs = st.tabs(["Overview", "Portfolio Balance", "Income & Expenses", "Year-by-Year Detail"])
-
-with proj_tabs[0]:
+# --- PROJECTIONS TAB ---
+with config_tabs[4]:
     st.subheader("Financial Overview")
-    
+
     # Summary stats
     years_working = len(projection[projection['work_income'] > 0])
     years_on_ss = len(projection[projection['ss_income'] > 0])
     avg_flex_reduction = (1 - projection['flex_multiplier'].mean()) * 100
-    
+
     col1, col2, col3 = st.columns(3)
     col1.metric("Years Working", years_working)
     col2.metric("Years on Social Security", years_on_ss)
     col3.metric("Avg Flex Reduction", f"{avg_flex_reduction:.1f}%")
-    
+
     # Create comprehensive overview chart
     fig = make_subplots(
         rows=3, cols=1,
@@ -938,7 +928,7 @@ with proj_tabs[0]:
         vertical_spacing=0.12,
         row_heights=[0.4, 0.3, 0.3]
     )
-    
+
     # Row 1: Total portfolio
     fig.add_trace(
         go.Scatter(
@@ -951,14 +941,9 @@ with proj_tabs[0]:
         ),
         row=1, col=1
     )
-    
-    fig.add_hline(
-        y=0,
-        line_dash="dash",
-        line_color="red",
-        row=1, col=1
-    )
-    
+
+    fig.add_hline(y=0, line_dash="dash", line_color="red", row=1, col=1)
+
     # Row 2: Income and expenses
     fig.add_trace(
         go.Scatter(
@@ -970,7 +955,7 @@ with proj_tabs[0]:
         ),
         row=2, col=1
     )
-    
+
     fig.add_trace(
         go.Scatter(
             x=projection['age'],
@@ -981,7 +966,7 @@ with proj_tabs[0]:
         ),
         row=2, col=1
     )
-    
+
     # Row 3: Individual accounts
     for acc in st.session_state.accounts:
         col_name = f"{acc['name']}_balance"
@@ -996,22 +981,22 @@ with proj_tabs[0]:
                 ),
                 row=3, col=1
             )
-    
+
     fig.update_xaxes(title_text="Age", row=3, col=1)
     fig.update_yaxes(title_text="Balance ($)", row=1, col=1)
     fig.update_yaxes(title_text="Annual ($)", row=2, col=1)
     fig.update_yaxes(title_text="Balance ($)", row=3, col=1)
-    
+
     fig.update_layout(height=900, showlegend=True, hovermode='x unified')
-    
+
     st.plotly_chart(fig, width='stretch')
 
-with proj_tabs[1]:
+    # Portfolio balance detail
+    st.divider()
     st.subheader("Portfolio Balance Over Time")
-    
+
     fig = go.Figure()
-    
-    # Total portfolio
+
     fig.add_trace(go.Scatter(
         x=projection['age'],
         y=projection['total_portfolio'],
@@ -1020,23 +1005,21 @@ with proj_tabs[1]:
         fill='tozeroy',
         line=dict(color='darkgreen', width=3)
     ))
-    
-    # Target age line
+
     fig.add_vline(
         x=target_age,
         line_dash="dash",
         line_color="blue",
         annotation_text=f"Target Age ({target_age})"
     )
-    
-    # Depletion line
+
     fig.add_hline(
         y=0,
         line_dash="dash",
         line_color="red",
         annotation_text="Zero Balance"
     )
-    
+
     fig.update_layout(
         title="Total Investment Portfolio Projection",
         xaxis_title="Age",
@@ -1044,15 +1027,15 @@ with proj_tabs[1]:
         hovermode='x unified',
         height=500
     )
-    
+
     st.plotly_chart(fig, width='stretch')
 
-with proj_tabs[2]:
+    # Income vs expenses detail
+    st.divider()
     st.subheader("Income vs Expenses")
-    
+
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    
-    # Income streams
+
     fig.add_trace(
         go.Scatter(
             x=projection['age'],
@@ -1064,7 +1047,7 @@ with proj_tabs[2]:
         ),
         secondary_y=False
     )
-    
+
     fig.add_trace(
         go.Scatter(
             x=projection['age'],
@@ -1076,8 +1059,7 @@ with proj_tabs[2]:
         ),
         secondary_y=False
     )
-    
-    # Expenses
+
     fig.add_trace(
         go.Scatter(
             x=projection['age'],
@@ -1089,7 +1071,7 @@ with proj_tabs[2]:
         ),
         secondary_y=False
     )
-    
+
     fig.add_trace(
         go.Scatter(
             x=projection['age'],
@@ -1101,50 +1083,48 @@ with proj_tabs[2]:
         ),
         secondary_y=False
     )
-    
+
     fig.update_xaxes(title_text="Age")
     fig.update_yaxes(title_text="Annual Amount ($)", secondary_y=False)
-    
+
     fig.update_layout(
         title="Income and Expense Breakdown",
         hovermode='x unified',
         height=500
     )
-    
+
     st.plotly_chart(fig, width='stretch')
 
-with proj_tabs[3]:
-    st.subheader("Complete Year-by-Year Projection")
-    
-    # Select key columns for display
+    # Year-by-year table
+    st.divider()
+    st.subheader("Year-by-Year Detail")
+
     display_cols = [
         'year', 'age', 'work_income', 'ss_income', 'total_income',
         'core_expenses', 'flex_expenses_actual', 'total_expenses',
         'surplus_deficit', 'total_contributions', 'total_withdrawals',
         'total_portfolio'
     ]
-    
+
     display_df = projection[display_cols].copy()
-    
-    # Format currency columns for display
-    currency_cols = ['work_income', 'ss_income', 'total_income', 'core_expenses', 
+
+    currency_cols = ['work_income', 'ss_income', 'total_income', 'core_expenses',
                      'flex_expenses_actual', 'total_expenses', 'surplus_deficit',
                      'total_contributions', 'total_withdrawals', 'total_portfolio']
-    
+
     for col in currency_cols:
         if col in display_df.columns:
             display_df[col] = display_df[col].apply(lambda x: f'${x:,.0f}')
-    
+
     st.dataframe(
         display_df,
         width='stretch',
         height=600
     )
-    
-    # Download button
+
     csv = projection.to_csv(index=False)
     st.download_button(
-        label="📥 Download Complete Projection (CSV)",
+        label="Download Complete Projection (CSV)",
         data=csv,
         file_name="retirement_projection_detailed.csv",
         mime="text/csv"
@@ -1152,6 +1132,6 @@ with proj_tabs[3]:
 
 # Footer
 st.divider()
-st.caption("""
-💡 This is your living financial control panel - update it annually and refine over time.
-""")
+st.caption(
+    "This is your living financial control panel - update it annually and refine over time."
+)
