@@ -81,7 +81,31 @@ class UserDataManager:
                 FOREIGN KEY (username) REFERENCES user_profiles(username)
             )
         """)
-        
+
+        # Account snapshots table (historical performance tracking)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS account_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                account_name TEXT NOT NULL,
+                snapshot_date TEXT NOT NULL,
+                amount_contributed REAL NOT NULL,
+                total_value REAL NOT NULL,
+                FOREIGN KEY (username) REFERENCES user_profiles(username)
+            )
+        """)
+
+        # Migration: add account_type and planned_contribution to existing databases
+        try:
+            cursor.execute("ALTER TABLE user_accounts ADD COLUMN account_type TEXT DEFAULT 'taxable_brokerage'")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
+        try:
+            cursor.execute("ALTER TABLE user_accounts ADD COLUMN planned_contribution REAL DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         conn.commit()
         conn.close()
     
@@ -147,25 +171,28 @@ class UserDataManager:
         """Save user's investment accounts."""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
         # Delete existing accounts
         cursor.execute("DELETE FROM user_accounts WHERE username = ?", (username,))
-        
+
         # Insert new accounts
         for acc in accounts:
             cursor.execute("""
-                INSERT INTO user_accounts 
-                (username, name, balance, annual_return, contrib_share, priority)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO user_accounts
+                (username, name, balance, annual_return, contrib_share, priority,
+                 account_type, planned_contribution)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 username,
                 acc['name'],
                 acc['balance'],
                 acc['return'],
-                acc['contrib_share'],
-                acc['priority']
+                acc.get('contrib_share', 0),
+                acc['priority'],
+                acc.get('account_type', 'taxable_brokerage'),
+                acc.get('planned_contribution', 0)
             ))
-        
+
         conn.commit()
         conn.close()
     
@@ -173,15 +200,16 @@ class UserDataManager:
         """Load user's investment accounts."""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
         cursor.execute("""
-            SELECT name, balance, annual_return, contrib_share, priority
+            SELECT name, balance, annual_return, contrib_share, priority,
+                   account_type, planned_contribution
             FROM user_accounts WHERE username = ? ORDER BY priority
         """, (username,))
-        
+
         rows = cursor.fetchall()
         conn.close()
-        
+
         accounts = []
         for row in rows:
             accounts.append({
@@ -189,9 +217,11 @@ class UserDataManager:
                 'balance': row[1],
                 'return': row[2],
                 'contrib_share': row[3],
-                'priority': row[4]
+                'priority': row[4],
+                'account_type': row[5] or 'taxable_brokerage',
+                'planned_contribution': row[6] or 0
             })
-        
+
         return accounts
     
     def save_user_expenses(self, username: str, expenses: List[Dict]):
@@ -288,6 +318,82 @@ class UserDataManager:
         
         return events
     
+    # --- Account Snapshot Methods ---
+
+    def save_snapshot(self, username: str, account_name: str,
+                      snapshot_date: str, amount_contributed: float,
+                      total_value: float):
+        """Record a point-in-time snapshot of an account's value."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO account_snapshots
+            (username, account_name, snapshot_date, amount_contributed, total_value)
+            VALUES (?, ?, ?, ?, ?)
+        """, (username, account_name, snapshot_date,
+              amount_contributed, total_value))
+        conn.commit()
+        conn.close()
+
+    def load_snapshots(self, username: str, account_name: str) -> List[Dict]:
+        """Load all snapshots for an account, ordered by date."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, snapshot_date, amount_contributed, total_value
+            FROM account_snapshots
+            WHERE username = ? AND account_name = ?
+            ORDER BY snapshot_date
+        """, (username, account_name))
+        rows = cursor.fetchall()
+        conn.close()
+
+        snapshots = []
+        for row in rows:
+            snapshots.append({
+                'id': row[0],
+                'date': row[1],
+                'contributed': row[2],
+                'total_value': row[3]
+            })
+        return snapshots
+
+    def delete_snapshot(self, username: str, snapshot_id: int):
+        """Delete a single snapshot by ID."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM account_snapshots WHERE id = ? AND username = ?",
+            (snapshot_id, username))
+        conn.commit()
+        conn.close()
+
+    def get_latest_snapshot_value(self, username: str,
+                                  account_name: str):
+        """Return the total_value from the most recent snapshot, or None."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT total_value FROM account_snapshots
+            WHERE username = ? AND account_name = ?
+            ORDER BY snapshot_date DESC LIMIT 1
+        """, (username, account_name))
+        row = cursor.fetchone()
+        conn.close()
+        return row[0] if row else None
+
+    def rename_account_snapshots(self, username: str, old_name: str,
+                                  new_name: str):
+        """Update snapshot records when an account is renamed."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE account_snapshots SET account_name = ?
+            WHERE username = ? AND account_name = ?
+        """, (new_name, username, old_name))
+        conn.commit()
+        conn.close()
+
     def user_exists(self, username: str) -> bool:
         """Check if user has saved data."""
         conn = sqlite3.connect(self.db_path)
@@ -318,8 +424,10 @@ class UserDataManager:
         }
         
         default_accounts = [
-            {'name': '401k', 'balance': 200000, 'return': 0.07, 'contrib_share': 0.80, 'priority': 1},
-            {'name': 'Roth IRA', 'balance': 50000, 'return': 0.07, 'contrib_share': 0.20, 'priority': 2},
+            {'name': '401k', 'account_type': '401k', 'balance': 200000,
+             'return': 0.07, 'contrib_share': 0, 'planned_contribution': 20000, 'priority': 1},
+            {'name': 'Roth IRA', 'account_type': 'roth_ira', 'balance': 50000,
+             'return': 0.07, 'contrib_share': 0, 'planned_contribution': 7000, 'priority': 2},
         ]
         
         default_expenses = [

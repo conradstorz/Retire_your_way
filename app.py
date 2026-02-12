@@ -12,10 +12,12 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import streamlit_authenticator as stauth
+from datetime import datetime, date
 from calculations import (
     AccountBucket,
     ExpenseCategory,
     OneTimeEvent,
+    ACCOUNT_TYPE_LABELS,
     run_comprehensive_projection,
     analyze_retirement_plan
 )
@@ -403,17 +405,8 @@ current_work_income = st.sidebar.number_input(
     min_value=0,
     value=int(user_profile['current_work_income']),
     step=5000,
-    help="Current annual salary/income"
+    help="Current annual salary/income (projected to grow at inflation rate)"
 )
-
-work_income_growth = st.sidebar.slider(
-    "Annual Income Growth (%)",
-    min_value=-10.0,
-    max_value=10.0,
-    value=float(user_profile['work_income_growth'] * 100),
-    step=0.5,
-    help="Expected annual salary increase (or decrease)"
-) / 100
 
 st.sidebar.divider()
 
@@ -474,7 +467,7 @@ if st.sidebar.button("💾 Save My Configuration", type="primary"):
         'target_age': target_age,
         'work_end_age': work_end_age,
         'current_work_income': current_work_income,
-        'work_income_growth': work_income_growth,
+        'work_income_growth': 0,
         'ss_start_age': ss_start_age,
         'ss_monthly_benefit': ss_monthly_benefit,
         'ss_cola': ss_cola,
@@ -497,12 +490,23 @@ config_tabs = st.tabs(["💰 Accounts", "🏠 Expenses", "📅 One-Time Events"]
 
 # --- ACCOUNTS TAB ---
 with config_tabs[0]:
-    st.subheader("Investment Account Buckets")
-    st.caption("Accounts are withdrawn in priority order (1 = first). Surplus is reinvested by contribution share.")
-    
+    st.subheader("Investment Accounts")
+    st.caption("Each account has a type (which controls contribution rules), a planned annual "
+               "contribution, and a withdrawal priority. Deficits withdraw in priority order (1 = first).")
+
+    # Account type options for the dropdown
+    account_type_options = list(ACCOUNT_TYPE_LABELS.keys())
+    account_type_display = list(ACCOUNT_TYPE_LABELS.values())
+
     # Display current accounts
     for i, acc in enumerate(st.session_state.accounts):
-        with st.expander(f"**{acc['name']}** - ${acc['balance']:,.0f}", expanded=False):
+        # Look up display label for this account's type
+        acc_type_label = ACCOUNT_TYPE_LABELS.get(
+            acc.get('account_type', 'taxable_brokerage'), 'Taxable Brokerage')
+        expander_label = (f"**{acc['name']}** ({acc_type_label}) "
+                          f"- ${acc['balance']:,.0f}")
+
+        with st.expander(expander_label, expanded=False):
             col1, col2 = st.columns(2)
             with col1:
                 acc['name'] = st.text_input(
@@ -510,6 +514,19 @@ with config_tabs[0]:
                     value=acc['name'],
                     key=f"acc_name_{i}"
                 )
+                current_type = acc.get('account_type', 'taxable_brokerage')
+                type_index = (account_type_options.index(current_type)
+                              if current_type in account_type_options else 3)
+                acc['account_type'] = account_type_options[
+                    st.selectbox(
+                        "Account Type",
+                        range(len(account_type_display)),
+                        index=type_index,
+                        format_func=lambda x: account_type_display[x],
+                        key=f"acc_type_{i}",
+                        help="Controls when contributions stop"
+                    )
+                ]
                 acc['balance'] = st.number_input(
                     "Current Balance ($)",
                     min_value=0,
@@ -519,13 +536,21 @@ with config_tabs[0]:
                 )
             with col2:
                 acc['return'] = st.number_input(
-                    "Annual Return (%)",
+                    "Expected Annual Return (%)",
                     min_value=0.0,
                     max_value=20.0,
                     value=float(acc['return'] * 100),
                     step=0.5,
                     key=f"acc_ret_{i}"
                 ) / 100
+                acc['planned_contribution'] = st.number_input(
+                    "Planned Annual Contribution ($)",
+                    min_value=0,
+                    value=int(acc.get('planned_contribution', 0)),
+                    step=500,
+                    key=f"acc_planned_{i}",
+                    help="Flat annual amount you plan to contribute"
+                )
                 acc['priority'] = st.number_input(
                     "Withdrawal Priority",
                     min_value=1,
@@ -534,39 +559,120 @@ with config_tabs[0]:
                     key=f"acc_pri_{i}",
                     help="1 = withdraw first, 2 = second, etc."
                 )
-            
-            acc['contrib_share'] = st.slider(
-                "Contribution Share (%)",
-                min_value=0.0,
-                max_value=100.0,
-                value=float(acc['contrib_share'] * 100),
-                step=5.0,
-                key=f"acc_contrib_{i}",
-                help="% of surplus to allocate to this account"
-            ) / 100
-            
-            if st.button(f"🗑️ Remove {acc['name']}", key=f"remove_acc_{i}"):
+
+            # --- HISTORICAL SNAPSHOTS ---
+            st.markdown("**Account History**")
+
+            snapshots = db_manager.load_snapshots(username, acc['name'])
+
+            if snapshots:
+                # Calculate derived metrics for each snapshot
+                display_rows = []
+                for s_idx, snap in enumerate(snapshots):
+                    row = {
+                        'Date': snap['date'],
+                        'Contributed': f"${snap['contributed']:,.0f}",
+                        'Total Value': f"${snap['total_value']:,.0f}",
+                    }
+                    if s_idx == 0:
+                        row['Growth'] = 'N/A'
+                        row['Growth %'] = 'N/A'
+                        row['ROI %'] = 'N/A'
+                    else:
+                        prev = snapshots[s_idx - 1]
+                        growth = (snap['total_value'] - prev['total_value']
+                                  - snap['contributed'])
+                        days = (datetime.strptime(snap['date'], '%Y-%m-%d')
+                                - datetime.strptime(prev['date'], '%Y-%m-%d')).days
+                        annualize = 365 / days if days > 0 else 1
+                        prev_val = prev['total_value']
+
+                        row['Growth'] = f"${growth:,.0f}"
+                        if prev_val > 0:
+                            total_change = snap['total_value'] - prev_val
+                            row['Growth %'] = f"{(total_change / prev_val) * annualize * 100:.1f}%"
+                            row['ROI %'] = f"{(growth / prev_val) * annualize * 100:.1f}%"
+                        else:
+                            row['Growth %'] = 'N/A'
+                            row['ROI %'] = 'N/A'
+
+                    display_rows.append(row)
+
+                st.dataframe(
+                    pd.DataFrame(display_rows),
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                # Auto-update balance from most recent snapshot
+                latest_value = snapshots[-1]['total_value']
+                if abs(acc['balance'] - latest_value) > 0.01:
+                    acc['balance'] = latest_value
+            else:
+                st.caption("No snapshots recorded yet. Add one below to start tracking performance.")
+
+            # Add snapshot form
+            with st.form(key=f"snapshot_form_{i}"):
+                st.caption("Record a new snapshot")
+                snap_cols = st.columns(3)
+                with snap_cols[0]:
+                    snap_date = st.date_input(
+                        "Date",
+                        value=date.today(),
+                        key=f"snap_date_{i}"
+                    )
+                with snap_cols[1]:
+                    snap_contributed = st.number_input(
+                        "Amount Contributed ($)",
+                        min_value=0,
+                        value=0,
+                        step=500,
+                        key=f"snap_contrib_{i}",
+                        help="Amount contributed since last snapshot"
+                    )
+                with snap_cols[2]:
+                    snap_value = st.number_input(
+                        "Total Account Value ($)",
+                        min_value=0,
+                        value=int(acc['balance']),
+                        step=1000,
+                        key=f"snap_value_{i}",
+                        help="Current total value of this account"
+                    )
+
+                if st.form_submit_button("Add Snapshot"):
+                    db_manager.save_snapshot(
+                        username, acc['name'],
+                        snap_date.isoformat(),
+                        snap_contributed, snap_value
+                    )
+                    # Update balance to match new snapshot
+                    acc['balance'] = snap_value
+                    st.rerun()
+
+            if st.button(f"Remove {acc['name']}", key=f"remove_acc_{i}"):
                 st.session_state.accounts.pop(i)
                 st.rerun()
-    
+
     # Add new account button
-    if st.button("➕ Add Account"):
+    if st.button("Add Account"):
         st.session_state.accounts.append({
             'name': f'Account {len(st.session_state.accounts) + 1}',
+            'account_type': 'taxable_brokerage',
             'balance': 10000,
             'return': 0.07,
-            'contrib_share': 0.0,
+            'contrib_share': 0,
+            'planned_contribution': 0,
             'priority': len(st.session_state.accounts) + 1
         })
         st.rerun()
-    
-    # Validation
-    total_contrib = sum(acc['contrib_share'] for acc in st.session_state.accounts)
-    if abs(total_contrib - 1.0) > 0.01 and total_contrib > 0:
-        st.warning(f"⚠️ Contribution shares sum to {total_contrib*100:.0f}% (should be 100%)")
-    
+
     total_balance = sum(acc['balance'] for acc in st.session_state.accounts)
-    st.info(f"**Total Portfolio: ${total_balance:,.0f}**")
+    total_planned = sum(acc.get('planned_contribution', 0)
+                        for acc in st.session_state.accounts)
+    col1, col2 = st.columns(2)
+    col1.info(f"**Total Portfolio: ${total_balance:,.0f}**")
+    col2.info(f"**Total Planned Contributions: ${total_planned:,.0f}/year**")
 
 # --- EXPENSES TAB ---
 with config_tabs[1]:
@@ -681,8 +787,9 @@ accounts = [
         name=acc['name'],
         balance=acc['balance'],
         annual_return=acc['return'],
-        contribution_share=acc['contrib_share'],
-        priority=acc['priority']
+        priority=acc['priority'],
+        account_type=acc.get('account_type', 'taxable_brokerage'),
+        planned_contribution=acc.get('planned_contribution', 0)
     )
     for acc in st.session_state.accounts
 ]
@@ -711,7 +818,6 @@ projection = run_comprehensive_projection(
     target_age=target_age,
     current_work_income=current_work_income,
     work_end_age=work_end_age,
-    work_income_growth=work_income_growth,
     ss_start_age=ss_start_age,
     ss_monthly_benefit=ss_monthly_benefit,
     ss_cola=ss_cola,
