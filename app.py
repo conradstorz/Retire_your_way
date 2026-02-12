@@ -489,9 +489,26 @@ st.header("⚙️ Configuration")
 # Make configuration tab labels larger for readability
 st.markdown("""
 <style>
-    div[data-testid="stTabs"] > div[role="tablist"] > button {
-        font-size: 1.5rem;
-        padding: 0.75rem 1.5rem;
+    button[data-baseweb="tab"] {
+        font-size: 1.5rem !important;
+        padding: 0.75rem 1.5rem !important;
+    }
+    button[data-baseweb="tab"] p {
+        font-size: 1.5rem !important;
+    }
+    div[data-baseweb="tab-list"] button {
+        font-size: 1.5rem !important;
+        padding: 0.75rem 1.5rem !important;
+    }
+    div[data-baseweb="tab-list"] button p {
+        font-size: 1.5rem !important;
+    }
+    .stTabs [data-baseweb="tab-list"] button {
+        font-size: 1.5rem !important;
+        padding: 0.75rem 1.5rem !important;
+    }
+    .stTabs [data-baseweb="tab-list"] button p {
+        font-size: 1.5rem !important;
     }
 </style>
 """, unsafe_allow_html=True)
