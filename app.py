@@ -371,119 +371,11 @@ I appologise for changes to the apperance from day to day.
 Please reach out with feedback!
 """)
 
-# ===== RUN PROJECTION =====
-# Run this early so dashboard and projections tab both have the data.
-# Profile values come from the saved user_profile. The Profile tab lets
-# the user edit and save new values, which take effect on the next rerun.
+# ===== DASHBOARD PLACEHOLDER =====
+# Reserve space at the top for the dashboard. It gets filled in AFTER the
+# configuration tabs so the projection uses current widget values.
 
-current_age = int(user_profile['current_age'])
-target_age = int(user_profile['target_age'])
-work_end_age = int(user_profile['work_end_age'])
-current_work_income = int(user_profile['current_work_income'])
-ss_start_age = int(user_profile['ss_start_age'])
-ss_monthly_benefit = int(user_profile['ss_monthly_benefit'])
-ss_cola = float(user_profile['ss_cola'])
-inflation_rate = float(user_profile['inflation_rate'])
-max_flex_reduction = float(user_profile['max_flex_reduction'])
-
-# Build data structures for calculation
-accounts = [
-    AccountBucket(
-        name=acc['name'],
-        balance=acc['balance'],
-        annual_return=acc['return'],
-        priority=acc['priority'],
-        account_type=acc.get('account_type', 'taxable_brokerage'),
-        planned_contribution=acc.get('planned_contribution', 0)
-    )
-    for acc in st.session_state.accounts
-]
-
-expenses = [
-    ExpenseCategory(
-        name=exp['name'],
-        annual_amount=exp['amount'],
-        category_type=exp['type']
-    )
-    for exp in st.session_state.expense_categories
-]
-
-events = [
-    OneTimeEvent(
-        year=evt['year'],
-        description=evt['description'],
-        amount=evt['amount']
-    )
-    for evt in st.session_state.events
-]
-
-projection = run_comprehensive_projection(
-    current_age=current_age,
-    target_age=target_age,
-    current_work_income=current_work_income,
-    work_end_age=work_end_age,
-    ss_start_age=ss_start_age,
-    ss_monthly_benefit=ss_monthly_benefit,
-    ss_cola=ss_cola,
-    accounts=accounts,
-    expense_categories=expenses,
-    max_flex_reduction=max_flex_reduction,
-    events=events,
-    inflation_rate=inflation_rate,
-    max_age=110
-)
-
-analysis = analyze_retirement_plan(projection, target_age=target_age)
-
-# ===== DASHBOARD =====
-
-st.header("📊 Dashboard")
-
-col1, col2, col3, col4, col5 = st.columns(5)
-
-with col1:
-    st.metric(
-        "Status",
-        analysis['status'],
-        delta="Good" if analysis['status'] == 'ON TRACK' else "Warning"
-    )
-
-with col2:
-    st.metric(
-        "Target Age",
-        target_age
-    )
-
-with col3:
-    if analysis['run_out_age']:
-        st.metric(
-            "Money Lasts Until",
-            f"Age {analysis['run_out_age']}"
-        )
-    else:
-        st.metric(
-            "Money Lasts Until",
-            "Age 110+"
-        )
-
-with col4:
-    cushion = analysis['cushion_years']
-    st.metric(
-        "Cushion",
-        f"{cushion} years",
-        delta="Good" if cushion >= 0 else "Short"
-    )
-
-with col5:
-    st.metric(
-        "Final Balance",
-        f"${analysis['final_balance']:,.0f}"
-    )
-
-if analysis['warnings']:
-    st.warning("**Warnings:**\n\n" + "\n\n".join(f"- {w}" for w in analysis['warnings']))
-else:
-    st.success("No warnings detected. Plan looks solid!")
+dashboard_container = st.container()
 
 # ===== CONFIGURATION & PROJECTIONS =====
 
@@ -918,6 +810,117 @@ with config_tabs[3]:
             'amount': 10000
         })
         st.rerun()
+
+# ===== RUN PROJECTION =====
+# Computed after all config tabs so it uses current widget values.
+
+accounts = [
+    AccountBucket(
+        name=acc['name'],
+        balance=acc['balance'],
+        annual_return=acc['return'],
+        priority=acc['priority'],
+        account_type=acc.get('account_type', 'taxable_brokerage'),
+        planned_contribution=acc.get('planned_contribution', 0)
+    )
+    for acc in st.session_state.accounts
+]
+
+expenses = [
+    ExpenseCategory(
+        name=exp['name'],
+        annual_amount=exp['amount'],
+        category_type=exp['type']
+    )
+    for exp in st.session_state.expense_categories
+]
+
+events_list = [
+    OneTimeEvent(
+        year=evt['year'],
+        description=evt['description'],
+        amount=evt['amount']
+    )
+    for evt in st.session_state.events
+]
+
+projection = run_comprehensive_projection(
+    current_age=current_age,
+    target_age=target_age,
+    current_work_income=current_work_income,
+    work_end_age=work_end_age,
+    ss_start_age=ss_start_age,
+    ss_monthly_benefit=ss_monthly_benefit,
+    ss_cola=ss_cola,
+    accounts=accounts,
+    expense_categories=expenses,
+    max_flex_reduction=max_flex_reduction,
+    events=events_list,
+    inflation_rate=inflation_rate,
+    max_age=110
+)
+
+analysis = analyze_retirement_plan(projection, target_age=target_age)
+
+# Look up portfolio balances at key ages
+retirement_row = projection[projection['age'] == work_end_age]
+balance_at_retirement = (retirement_row.iloc[0]['total_portfolio']
+                         if len(retirement_row) > 0 else None)
+
+target_row = projection[projection['age'] == target_age]
+balance_at_target = (target_row.iloc[0]['total_portfolio']
+                     if len(target_row) > 0 else None)
+
+# ===== FILL IN DASHBOARD =====
+
+with dashboard_container:
+    st.header("Dashboard")
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    with col1:
+        st.metric(
+            "Status",
+            analysis['status'],
+            delta="Good" if analysis['status'] == 'ON TRACK' else "Warning"
+        )
+
+    with col2:
+        if analysis['run_out_age']:
+            st.metric("Money Lasts Until", f"Age {analysis['run_out_age']}")
+        else:
+            st.metric("Money Lasts Until", "Age 110+")
+
+    with col3:
+        cushion = analysis['cushion_years']
+        st.metric(
+            "Cushion",
+            f"{cushion} years",
+            delta="Good" if cushion >= 0 else "Short"
+        )
+
+    with col4:
+        if balance_at_retirement is not None:
+            st.metric(
+                f"At Retirement ({work_end_age})",
+                f"${balance_at_retirement:,.0f}"
+            )
+        else:
+            st.metric(f"At Retirement ({work_end_age})", "N/A")
+
+    with col5:
+        if balance_at_target is not None:
+            st.metric(
+                f"At Target Age ({target_age})",
+                f"${balance_at_target:,.0f}"
+            )
+        else:
+            st.metric(f"At Target Age ({target_age})", "Depleted")
+
+    if analysis['warnings']:
+        st.warning("**Warnings:**\n\n" + "\n\n".join(f"- {w}" for w in analysis['warnings']))
+    else:
+        st.success("No warnings detected. Plan looks solid!")
 
 # --- PROJECTIONS TAB ---
 with config_tabs[4]:
