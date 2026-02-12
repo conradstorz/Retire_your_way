@@ -486,6 +486,16 @@ if st.sidebar.button("💾 Save My Configuration", type="primary"):
 
 st.header("⚙️ Configuration")
 
+# Make configuration tab labels larger for readability
+st.markdown("""
+<style>
+    div[data-testid="stTabs"] > div[role="tablist"] > button {
+        font-size: 1.5rem;
+        padding: 0.75rem 1.5rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 config_tabs = st.tabs(["💰 Accounts", "🏠 Expenses", "📅 One-Time Events"])
 
 # --- ACCOUNTS TAB ---
