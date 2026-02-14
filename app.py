@@ -1079,7 +1079,7 @@ with config_tabs[4]:
             'Planned Contrib': f"${acc.get('planned_contribution', 0):,.0f}"
         } for acc in st.session_state.accounts])
         
-        st.dataframe(account_df, hide_index=True, use_container_width=True)
+        st.dataframe(account_df, hide_index=True, width='stretch')
     
     with acct_col2:
         st.metric("Total Portfolio", f"${total_portfolio:,.0f}")
