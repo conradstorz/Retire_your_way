@@ -207,27 +207,50 @@ class UserDataManager:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
-        cursor.execute("""
-            SELECT name, balance, annual_return, contrib_share, priority,
-                   account_type, planned_contribution, continue_post_retirement
-            FROM user_accounts WHERE username = ? ORDER BY priority
-        """, (username,))
-
-        rows = cursor.fetchall()
+        # Try to load with all columns; fall back if continue_post_retirement doesn't exist
+        try:
+            cursor.execute("""
+                SELECT name, balance, annual_return, contrib_share, priority,
+                       account_type, planned_contribution, continue_post_retirement
+                FROM user_accounts WHERE username = ? ORDER BY priority
+            """, (username,))
+            rows = cursor.fetchall()
+            
+            accounts = []
+            for row in rows:
+                accounts.append({
+                    'name': row[0],
+                    'balance': row[1],
+                    'return': row[2],
+                    'contrib_share': row[3],
+                    'priority': row[4],
+                    'account_type': row[5] or 'taxable_brokerage',
+                    'planned_contribution': row[6] or 0,
+                    'continue_post_retirement': bool(row[7]) if row[7] is not None else False
+                })
+        except sqlite3.OperationalError:
+            # Column doesn't exist yet, load without it
+            cursor.execute("""
+                SELECT name, balance, annual_return, contrib_share, priority,
+                       account_type, planned_contribution
+                FROM user_accounts WHERE username = ? ORDER BY priority
+            """, (username,))
+            rows = cursor.fetchall()
+            
+            accounts = []
+            for row in rows:
+                accounts.append({
+                    'name': row[0],
+                    'balance': row[1],
+                    'return': row[2],
+                    'contrib_share': row[3],
+                    'priority': row[4],
+                    'account_type': row[5] or 'taxable_brokerage',
+                    'planned_contribution': row[6] or 0,
+                    'continue_post_retirement': False
+                })
+        
         conn.close()
-
-        accounts = []
-        for row in rows:
-            accounts.append({
-                'name': row[0],
-                'balance': row[1],
-                'return': row[2],
-                'contrib_share': row[3],
-                'priority': row[4],
-                'account_type': row[5] or 'taxable_brokerage',
-                'planned_contribution': row[6] or 0,
-                'continue_post_retirement': bool(row[7]) if len(row) > 7 else False
-            })
 
         return accounts
     

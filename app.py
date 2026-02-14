@@ -827,18 +827,20 @@ with config_tabs[3]:
 # ===== RUN PROJECTION =====
 # Computed after all config tabs so it uses current widget values.
 
-accounts = [
-    AccountBucket(
-        name=acc['name'],
-        balance=acc['balance'],
-        annual_return=acc['return'],
-        priority=acc['priority'],
-        account_type=acc.get('account_type', 'taxable_brokerage'),
-        planned_contribution=acc.get('planned_contribution', 0),
-        continue_post_retirement=acc.get('continue_post_retirement', False)
+# Ensure backward compatibility for accounts that may not have all fields
+accounts = []
+for acc in st.session_state.accounts:
+    # Ensure all required fields exist with defaults
+    account = AccountBucket(
+        name=acc.get('name', 'Unknown'),
+        balance=float(acc.get('balance', 0)),
+        annual_return=float(acc.get('return', 0.07)),
+        priority=int(acc.get('priority', 1)),
+        account_type=str(acc.get('account_type', 'taxable_brokerage')),
+        planned_contribution=float(acc.get('planned_contribution', 0)),
+        continue_post_retirement=bool(acc.get('continue_post_retirement', False))
     )
-    for acc in st.session_state.accounts
-]
+    accounts.append(account)
 
 expenses = [
     ExpenseCategory(
