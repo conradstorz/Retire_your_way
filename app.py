@@ -190,10 +190,7 @@ if authentication_status == False:
                         if security_question:
                             st.success("✅ Security question set successfully!")
                         
-                        st.markdown("**You can now login with your credentials.**")
-                        
-                        if st.button("🔐 Return to Login Page", type="primary", key="return_login_1"):
-                            st.rerun()
+                        st.markdown("**You can now login with your credentials. Please close this expander to proceed.**")
                     else:
                         st.error("Username already exists")
     
@@ -317,10 +314,7 @@ elif authentication_status == None:
                         if security_question:
                             st.success("✅ Security question set successfully!")
                         
-                        st.markdown("**You can now login with your credentials.**")
-                        
-                        if st.button("🔐 Return to Login Page", type="primary", key="return_login_2"):
-                            st.rerun()
+                        st.markdown("**You can now login with your credentials. Please close this expander to proceed.**")
                     else:
                         st.error("Username already exists")
     
