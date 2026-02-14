@@ -402,7 +402,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-config_tabs = st.tabs(["📋 Profile", "💰 Accounts", "🏠 Expenses", "📅 One-Time Events", "📈 Projections"])
+config_tabs = st.tabs(["📋 Profile", "💰 Accounts", "🏠 Expenses", "📅 One-Time Events", "✅ Sanity Checks", "📈 Projections"])
 
 # --- PROFILE TAB ---
 with config_tabs[0]:
@@ -567,6 +567,25 @@ with config_tabs[1]:
                     key=f"acc_planned_{i}",
                     help="Flat annual amount you plan to contribute"
                 )
+                
+                # Show option to continue contributions after retirement for eligible account types
+                acc_type = acc.get('account_type', 'taxable_brokerage')
+                if acc_type in ['traditional_ira', 'roth_ira', 'taxable_brokerage']:
+                    # Create account-specific help text
+                    help_texts = {
+                        'traditional_ira': "If checked, contributions continue until age 73 (IRS limit). Requires earned income.",
+                        'roth_ira': "If checked, contributions continue indefinitely. Requires earned income and income limits apply.",
+                        'taxable_brokerage': "If checked, contributions continue indefinitely as long as you have income."
+                    }
+                    acc['continue_post_retirement'] = st.checkbox(
+                        "Continue contributions after retirement",
+                        value=acc.get('continue_post_retirement', False),
+                        key=f"acc_continue_{i}",
+                        help=help_texts.get(acc_type, "Continue contributions after work ends")
+                    )
+                else:
+                    acc['continue_post_retirement'] = False
+                
                 acc['priority'] = st.number_input(
                     "Withdrawal Priority",
                     min_value=1,
@@ -815,7 +834,8 @@ accounts = [
         annual_return=acc['return'],
         priority=acc['priority'],
         account_type=acc.get('account_type', 'taxable_brokerage'),
-        planned_contribution=acc.get('planned_contribution', 0)
+        planned_contribution=acc.get('planned_contribution', 0),
+        continue_post_retirement=acc.get('continue_post_retirement', False)
     )
     for acc in st.session_state.accounts
 ]
@@ -917,7 +937,158 @@ with dashboard_container:
         st.success("No warnings detected. Plan looks solid!")
 
 # --- PROJECTIONS TAB ---
+# --- SANITY CHECKS TAB ---
 with config_tabs[4]:
+    st.subheader("Current Year Sanity Checks")
+    st.markdown("""
+    Quick reality check on your numbers **as of today** (age {}).
+    This helps catch data entry errors before running projections.
+    """.format(current_age))
+    
+    # Calculate current year metrics
+    current_work_income_val = current_work_income if current_age < work_end_age else 0
+    current_ss_income = ss_monthly_benefit * 12 if current_age >= ss_start_age else 0
+    current_total_income = current_work_income_val + current_ss_income
+    
+    # Get current expenses
+    current_core_expenses = sum(e['amount'] for e in st.session_state.expense_categories if e['type'] == 'CORE')
+    current_flex_expenses = sum(e['amount'] for e in st.session_state.expense_categories if e['type'] == 'FLEX')
+    current_total_expenses = current_core_expenses + current_flex_expenses
+    
+    # Get planned contributions for current year
+    current_planned_contributions = 0
+    for acc in st.session_state.accounts:
+        acc_type = acc.get('account_type', 'taxable_brokerage')
+        planned_contrib = acc.get('planned_contribution', 0)
+        continue_post_ret = acc.get('continue_post_retirement', False)
+        
+        # Check if this account can receive contributions this year
+        from calculations import can_contribute
+        if can_contribute(acc_type, current_age, work_end_age, continue_post_ret):
+            current_planned_contributions += planned_contrib
+    
+    # Calculate net cash flow
+    net_before_contributions = current_total_income - current_total_expenses
+    net_after_contributions = net_before_contributions - current_planned_contributions
+    
+    # Display in columns
+    st.markdown("### 📊 Current Year Cash Flow")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("**💵 Income**")
+        st.metric("Work Income", f"${current_work_income_val:,.0f}")
+        st.metric("Social Security", f"${current_ss_income:,.0f}")
+        st.metric("Total Income", f"${current_total_income:,.0f}", 
+                 help="Annual income for current year")
+    
+    with col2:
+        st.markdown("**📤 Outflows**")
+        st.metric("Core Expenses", f"${current_core_expenses:,.0f}", 
+                 help="Essential spending that cannot be reduced")
+        st.metric("Flex Expenses", f"${current_flex_expenses:,.0f}",
+                 help="Discretionary spending that can be reduced up to 50%")
+        st.metric("Planned Contributions", f"${current_planned_contributions:,.0f}",
+                 help="Annual contributions to investment accounts")
+        st.metric("Total Outflows", f"${current_total_expenses + current_planned_contributions:,.0f}")
+    
+    with col3:
+        st.markdown("**💰 Net Position**")
+        
+        # Net before contributions
+        delta_color_before = "normal" if net_before_contributions >= 0 else "inverse"
+        st.metric(
+            "After Expenses",
+            f"${net_before_contributions:,.0f}",
+            delta=None,
+            help="Income minus expenses (before contributions)"
+        )
+        
+        # Net after contributions
+        delta_color_after = "normal" if net_after_contributions >= 0 else "inverse"
+        st.metric(
+            "After Contributions",
+            f"${net_after_contributions:,.0f}",
+            delta=None,
+            help="Income minus expenses and planned contributions"
+        )
+        
+        # Savings rate
+        if current_total_income > 0:
+            savings_rate = (current_planned_contributions / current_total_income) * 100
+            st.metric("Savings Rate", f"{savings_rate:.1f}%",
+                     help="Planned contributions as % of income")
+    
+    st.divider()
+    
+    # Warnings and recommendations
+    st.markdown("### ⚠️ Quick Checks")
+    
+    checks_col1, checks_col2 = st.columns(2)
+    
+    with checks_col1:
+        # Income checks
+        if current_total_income == 0 and current_age < work_end_age:
+            st.warning("⚠️ No income configured but still before retirement age")
+        
+        if current_work_income_val > 0 and current_work_income_val < 10000:
+            st.info("ℹ️ Work income seems low - verify this is annual (not monthly)")
+        
+        if current_total_expenses == 0:
+            st.warning("⚠️ No expenses configured")
+        
+        if current_core_expenses == 0:
+            st.info("ℹ️ No core expenses - consider adding housing, food, healthcare")
+    
+    with checks_col2:
+        # Expense checks  
+        if current_total_income > 0:
+            expense_ratio = (current_total_expenses / current_total_income) * 100
+            if expense_ratio > 100:
+                st.error(f"❌ Expenses are {expense_ratio:.0f}% of income - currently running a deficit")
+            elif expense_ratio > 90:
+                st.warning(f"⚠️ Expenses are {expense_ratio:.0f}% of income - very tight budget")
+            elif expense_ratio < 30:
+                st.info(f"ℹ️ Expenses are only {expense_ratio:.0f}% of income - verify numbers are annual")
+        
+        # Contribution checks
+        if net_after_contributions < 0:
+            shortfall = abs(net_after_contributions)
+            st.error(f"❌ Planned contributions exceed available funds by ${shortfall:,.0f}")
+        
+        if current_planned_contributions > 0 and current_total_income == 0:
+            st.warning("⚠️ Planned contributions set but no income configured")
+    
+    st.divider()
+    
+    # Account balances summary
+    st.markdown("### 🏦 Current Account Balances")
+    total_portfolio = sum(acc['balance'] for acc in st.session_state.accounts)
+    
+    acct_col1, acct_col2 = st.columns([2, 1])
+    
+    with acct_col1:
+        account_df = pd.DataFrame([{
+            'Account': acc['name'],
+            'Type': ACCOUNT_TYPE_LABELS.get(acc.get('account_type', 'taxable_brokerage'), 'Unknown'),
+            'Balance': f"${acc['balance']:,.0f}",
+            'Annual Return': f"{acc['return']*100:.1f}%",
+            'Planned Contrib': f"${acc.get('planned_contribution', 0):,.0f}"
+        } for acc in st.session_state.accounts])
+        
+        st.dataframe(account_df, hide_index=True, use_container_width=True)
+    
+    with acct_col2:
+        st.metric("Total Portfolio", f"${total_portfolio:,.0f}")
+        
+        if total_portfolio > 0 and current_total_expenses > 0:
+            years_of_expenses = total_portfolio / current_total_expenses
+            st.metric("Years of Expenses", f"{years_of_expenses:.1f}",
+                     help="Current portfolio ÷ annual expenses (ignoring investment returns)")
+
+# --- PROJECTIONS TAB ---
+with config_tabs[5]:
     st.subheader("Financial Overview")
 
     # Summary stats

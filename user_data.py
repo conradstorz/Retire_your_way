@@ -105,6 +105,11 @@ class UserDataManager:
             cursor.execute("ALTER TABLE user_accounts ADD COLUMN planned_contribution REAL DEFAULT 0")
         except sqlite3.OperationalError:
             pass  # Column already exists
+        
+        try:
+            cursor.execute("ALTER TABLE user_accounts ADD COLUMN continue_post_retirement INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
 
         conn.commit()
         conn.close()
@@ -180,8 +185,8 @@ class UserDataManager:
             cursor.execute("""
                 INSERT INTO user_accounts
                 (username, name, balance, annual_return, contrib_share, priority,
-                 account_type, planned_contribution)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 account_type, planned_contribution, continue_post_retirement)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 username,
                 acc['name'],
@@ -190,7 +195,8 @@ class UserDataManager:
                 acc.get('contrib_share', 0),
                 acc['priority'],
                 acc.get('account_type', 'taxable_brokerage'),
-                acc.get('planned_contribution', 0)
+                acc.get('planned_contribution', 0),
+                1 if acc.get('continue_post_retirement', False) else 0
             ))
 
         conn.commit()
@@ -203,7 +209,7 @@ class UserDataManager:
 
         cursor.execute("""
             SELECT name, balance, annual_return, contrib_share, priority,
-                   account_type, planned_contribution
+                   account_type, planned_contribution, continue_post_retirement
             FROM user_accounts WHERE username = ? ORDER BY priority
         """, (username,))
 
@@ -219,7 +225,8 @@ class UserDataManager:
                 'contrib_share': row[3],
                 'priority': row[4],
                 'account_type': row[5] or 'taxable_brokerage',
-                'planned_contribution': row[6] or 0
+                'planned_contribution': row[6] or 0,
+                'continue_post_retirement': bool(row[7]) if len(row) > 7 else False
             })
 
         return accounts
@@ -425,9 +432,11 @@ class UserDataManager:
         
         default_accounts = [
             {'name': '401k', 'account_type': '401k', 'balance': 200000,
-             'return': 0.07, 'contrib_share': 0, 'planned_contribution': 20000, 'priority': 1},
+             'return': 0.07, 'contrib_share': 0, 'planned_contribution': 20000, 'priority': 1,
+             'continue_post_retirement': False},
             {'name': 'Roth IRA', 'account_type': 'roth_ira', 'balance': 50000,
-             'return': 0.07, 'contrib_share': 0, 'planned_contribution': 7000, 'priority': 2},
+             'return': 0.07, 'contrib_share': 0, 'planned_contribution': 7000, 'priority': 2,
+             'continue_post_retirement': False},
         ]
         
         default_expenses = [

@@ -26,6 +26,7 @@ class AccountBucket:
     priority: int  # Withdrawal order (1 = first)
     account_type: str  # '401k', 'traditional_ira', 'roth_ira', 'taxable_brokerage'
     planned_contribution: float  # Annual dollar amount the user plans to add
+    continue_post_retirement: bool = False  # Continue contributions after work_end_age
 
 
 @dataclass
@@ -64,13 +65,30 @@ ACCOUNT_TYPE_LABELS = {
 }
 
 
-def can_contribute(account_type: str, age: int, work_end_age: int) -> bool:
-    """Check if an account type is eligible for contributions at a given age."""
+def can_contribute(account_type: str, age: int, work_end_age: int, continue_post_retirement: bool = False) -> bool:
+    """Check if an account type is eligible for contributions at a given age.
+    
+    Args:
+        account_type: Type of account (401k, traditional_ira, roth_ira, taxable_brokerage)
+        age: Current age
+        work_end_age: Age when work income stops
+        continue_post_retirement: If True, allows contributions after work_end_age for eligible accounts
+    """
     rule = CONTRIBUTION_STOP_RULES.get(account_type)
     if rule is None:
         return True
     if rule == 'work_end_age':
         return age < work_end_age
+    
+    # For accounts with age-based rules (like Traditional IRA at 73),
+    # check both the age rule and whether user wants to continue after retirement
+    if isinstance(rule, int):
+        # If user wants to continue post-retirement and still under age limit
+        if continue_post_retirement:
+            return age < rule
+        # Otherwise, stop at work_end_age even if under the age limit
+        return age < work_end_age and age < rule
+    
     return age < rule
 
 
@@ -174,7 +192,7 @@ def run_comprehensive_projection(
 
         planned = {}
         for acc in accounts:
-            if can_contribute(acc.account_type, age, work_end_age):
+            if can_contribute(acc.account_type, age, work_end_age, acc.continue_post_retirement):
                 planned[acc.name] = acc.planned_contribution
             else:
                 planned[acc.name] = 0
@@ -409,10 +427,13 @@ def analyze_retirement_plan(
         ]
         if len(shortfall_years) > 0:
             first_shortfall_age = int(shortfall_years.iloc[0]['age'])
+            total_shortfall = shortfall_years['contribution_shortfall'].sum()
             warnings.append(
-                f'Planned contributions cannot be fully funded starting at '
-                f'age {first_shortfall_age} -- discretionary spending '
-                f'already at minimum'
+                f'Income insufficient to fund planned account contributions '
+                f'starting at age {first_shortfall_age} '
+                f'(${total_shortfall:,.0f} total shortfall). '
+                f'Consider reducing planned contributions for accounts that '
+                f'allow post-retirement contributions (Traditional IRA, Roth IRA, Taxable Brokerage).'
             )
 
     # Check for early withdrawals
