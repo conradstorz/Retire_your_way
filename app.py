@@ -42,6 +42,22 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Initialize expander states (must be before authentication flow)
+if 'expander_recovery_false' not in st.session_state:
+    st.session_state.expander_recovery_false = False
+if 'expander_registration_false' not in st.session_state:
+    st.session_state.expander_registration_false = False
+if 'expander_recovery_none' not in st.session_state:
+    st.session_state.expander_recovery_none = False
+if 'expander_registration_none' not in st.session_state:
+    st.session_state.expander_registration_none = False
+if 'expander_accounts' not in st.session_state:
+    st.session_state.expander_accounts = {}
+if 'expander_expenses' not in st.session_state:
+    st.session_state.expander_expenses = {}
+if 'expander_events' not in st.session_state:
+    st.session_state.expander_events = {}
+
 # Initialize credentials file
 init_credentials_file()
 
@@ -77,14 +93,8 @@ if authentication_status == False:
     st.error('Username/password is incorrect')
     
     # Password Recovery section
-    with st.expander("🔑 Forgot Password? Recover Account", expanded=st.session_state.expander_recovery_false):
-        col_header, col_collapse = st.columns([4, 1])
-        with col_header:
-            st.markdown("Reset your password using your recovery code or security question.")
-        with col_collapse:
-            if st.button("✖ Collapse", key="collapse_recovery_false"):
-                st.session_state.expander_recovery_false = False
-                st.rerun()
+    with st.expander("🔑 Forgot Password? Recover Account", expanded=False):
+        st.markdown("Reset your password using your recovery code or security question.")
         
         recovery_method = st.radio(
             "Recovery Method:",
@@ -140,7 +150,7 @@ if authentication_status == False:
                         st.error("Please provide the required recovery information")
     
     # Registration section
-    with st.expander("📝 New User Registration"):
+    with st.expander("📝 New User Registration", expanded=False):
         st.markdown("Create a new account to start planning your retirement.")
         
         with st.form("registration_form"):
@@ -206,14 +216,8 @@ elif authentication_status == None:
     st.warning('Please enter your username and password')
     
     # Password Recovery section
-    with st.expander("🔑 Forgot Password? Recover Account", expanded=st.session_state.expander_recovery_none):
-        col_header, col_collapse = st.columns([4, 1])
-        with col_header:
-            st.markdown("Reset your password using your recovery code or security question.")
-        with col_collapse:
-            if st.button("✖ Collapse", key="collapse_recovery_none"):
-                st.session_state.expander_recovery_none = False
-                st.rerun()
+    with st.expander("🔑 Forgot Password? Recover Account", expanded=False):
+        st.markdown("Reset your password using your recovery code or security question.")
         
         recovery_method = st.radio(
             "Recovery Method:",
@@ -270,14 +274,8 @@ elif authentication_status == None:
                         st.error("Please provide the required recovery information")
     
     # Registration section
-    with st.expander("📝 New User Registration", expanded=st.session_state.expander_registration_none):
-        col_header, col_collapse = st.columns([4, 1])
-        with col_header:
-            st.markdown("Create a new account to start planning your retirement.")
-        with col_collapse:
-            if st.button("✖ Collapse", key="collapse_registration_none"):
-                st.session_state.expander_registration_none = False
-                st.rerun()
+    with st.expander("📝 New User Registration", expanded=False):
+        st.markdown("Create a new account to start planning your retirement.")
         
         with st.form("registration_form_none"):
             new_username = st.text_input("Username")
@@ -365,22 +363,6 @@ if 'events' not in st.session_state:
 
 if 'data_loaded' not in st.session_state:
     st.session_state.data_loaded = True
-
-# Initialize expander states
-if 'expander_recovery_false' not in st.session_state:
-    st.session_state.expander_recovery_false = False
-if 'expander_registration_false' not in st.session_state:
-    st.session_state.expander_registration_false = False
-if 'expander_recovery_none' not in st.session_state:
-    st.session_state.expander_recovery_none = False
-if 'expander_registration_none' not in st.session_state:
-    st.session_state.expander_registration_none = False
-if 'expander_accounts' not in st.session_state:
-    st.session_state.expander_accounts = {}
-if 'expander_expenses' not in st.session_state:
-    st.session_state.expander_expenses = {}
-if 'expander_events' not in st.session_state:
-    st.session_state.expander_events = {}
 
 # Title with user greeting and logout button on same row
 title_col, logout_col = st.columns([4, 1])
@@ -548,24 +530,23 @@ with config_tabs[1]:
     account_type_options = list(ACCOUNT_TYPE_LABELS.keys())
     account_type_display = list(ACCOUNT_TYPE_LABELS.values())
 
+    # Summary totals at the top
+    total_balance = sum(acc['balance'] for acc in st.session_state.accounts)
+    total_planned = sum(acc.get('planned_contribution', 0)
+                        for acc in st.session_state.accounts)
+    col1, col2 = st.columns(2)
+    col1.info(f"**Total Portfolio: ${total_balance:,.0f}**")
+    col2.info(f"**Total Planned Contributions: ${total_planned:,.0f}/year**")
+
     # Display current accounts
     for i, acc in enumerate(st.session_state.accounts):
-        # Initialize expander state for this account
-        if i not in st.session_state.expander_accounts:
-            st.session_state.expander_accounts[i] = False
-        
         # Look up display label for this account's type
         acc_type_label = ACCOUNT_TYPE_LABELS.get(
             acc.get('account_type', 'taxable_brokerage'), 'Taxable Brokerage')
         expander_label = (f"**{acc['name']}** ({acc_type_label}) "
                           f"- ${acc['balance']:,.0f}")
 
-        with st.expander(expander_label, expanded=st.session_state.expander_accounts[i]):
-            # Collapse button
-            if st.button("✖ Collapse", key=f"collapse_acc_{i}"):
-                st.session_state.expander_accounts[i] = False
-                st.rerun()
-            
+        with st.expander(expander_label, expanded=False):
             col1, col2 = st.columns(2)
             with col1:
                 acc['name'] = st.text_input(
@@ -742,14 +723,6 @@ with config_tabs[1]:
 
             if st.button(f"Remove {acc['name']}", key=f"remove_acc_{i}"):
                 st.session_state.accounts.pop(i)
-                # Rebuild expander state dictionary with shifted indices
-                new_state = {}
-                for idx in range(len(st.session_state.accounts)):
-                    if idx < i:
-                        new_state[idx] = st.session_state.expander_accounts.get(idx, False)
-                    else:
-                        new_state[idx] = st.session_state.expander_accounts.get(idx + 1, False)
-                st.session_state.expander_accounts = new_state
                 st.rerun()
 
     # Add new account button
@@ -767,13 +740,6 @@ with config_tabs[1]:
         st.session_state.expander_accounts[new_index] = True
         st.rerun()
 
-    total_balance = sum(acc['balance'] for acc in st.session_state.accounts)
-    total_planned = sum(acc.get('planned_contribution', 0)
-                        for acc in st.session_state.accounts)
-    col1, col2 = st.columns(2)
-    col1.info(f"**Total Portfolio: ${total_balance:,.0f}**")
-    col2.info(f"**Total Planned Contributions: ${total_planned:,.0f}/year**")
-
 # --- EXPENSES TAB ---
 with config_tabs[2]:
     st.subheader("Expense Categories")
@@ -781,16 +747,7 @@ with config_tabs[2]:
     
     # Display categories
     for i, exp in enumerate(st.session_state.expense_categories):
-        # Initialize expander state for this expense
-        if i not in st.session_state.expander_expenses:
-            st.session_state.expander_expenses[i] = False
-        
-        with st.expander(f"**{exp['name']}** - ${exp['amount']:,.0f}/year ({exp['type']})", expanded=st.session_state.expander_expenses[i]):
-            # Collapse button
-            if st.button("✖ Collapse", key=f"collapse_exp_{i}"):
-                st.session_state.expander_expenses[i] = False
-                st.rerun()
-            
+        with st.expander(f"**{exp['name']}** - ${exp['amount']:,.0f}/year ({exp['type']})", expanded=False):
             col1, col2 = st.columns(2)
             with col1:
                 exp['name'] = st.text_input(
@@ -818,14 +775,6 @@ with config_tabs[2]:
             
             if st.button(f"🗑️ Remove {exp['name']}", key=f"remove_exp_{i}"):
                 st.session_state.expense_categories.pop(i)
-                # Rebuild expander state dictionary with shifted indices
-                new_state = {}
-                for idx in range(len(st.session_state.expense_categories)):
-                    if idx < i:
-                        new_state[idx] = st.session_state.expander_expenses.get(idx, False)
-                    else:
-                        new_state[idx] = st.session_state.expander_expenses.get(idx + 1, False)
-                st.session_state.expander_expenses = new_state
                 st.rerun()
     
     # Add new expense
@@ -836,7 +785,6 @@ with config_tabs[2]:
             'amount': 5000,
             'type': 'FLEX'
         })
-        st.session_state.expander_expenses[new_index] = True
         st.rerun()
     
     # Summary
@@ -852,22 +800,90 @@ with config_tabs[2]:
 # --- EVENTS TAB ---
 with config_tabs[3]:
     st.subheader("One-Time Financial Events")
-    st.caption("Positive amounts = expenses. Negative amounts = windfalls.")
+    
+    # Add custom CSS for left-aligned event buttons
+    st.markdown("""
+    <style>
+    /* Left-align event toggle buttons */
+    .stButton > button {
+        text-align: left !important;
+        justify-content: flex-start !important;
+    }
+    .stButton > button > div {
+        text-align: left !important;
+        justify-content: flex-start !important;
+    }
+    .stButton > button p {
+        text-align: left !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Explanation
+    with st.expander("ℹ️ What are One-Time Events?", expanded=False):
+        st.markdown("""
+        **One-Time Events** let you model major transactions that directly affect your investment accounts in specific years:
+        
+        **Withdrawals (money out of an account):**
+        - Major purchases (car, home renovation, boat)
+        - College tuition payments
+        - Medical procedures
+        - Large gifts to family
+        
+        **Additions (money into an account):**
+        - Inheritance deposited into investment accounts
+        - Property sale proceeds invested
+        - Bonus or severance package invested
+        - Life insurance payout invested
+        - Large tax refunds invested
+        
+        **How they work:**
+        - Events directly adjust the specified account's balance in the event year
+        - They happen AFTER your normal annual income, expenses, and contributions
+        - They don't interfere with your regular cash flow or budget
+        - Perfect for modeling life events that directly impact your retirement portfolio
+        
+        **Example:** "In 2030, withdraw $25,000 from Brokerage Account for car purchase" will directly 
+        reduce your brokerage account balance by $25,000 in 2030.
+        """)
     
     if len(st.session_state.events) == 0:
         st.info("No events configured. Add major one-time expenses or income below.")
     
     for i, evt in enumerate(st.session_state.events):
-        # Initialize expander state for this event
-        if i not in st.session_state.expander_events:
-            st.session_state.expander_events[i] = False
+        # Create a unique key for this event expander
+        expander_key = f"event_expander_{i}"
         
-        with st.expander(f"**{evt['description']}** - ${evt['amount']:,.0f} in {evt['year']}", expanded=st.session_state.expander_events[i]):
-            # Collapse button
-            if st.button("✖ Collapse", key=f"collapse_evt_{i}"):
-                st.session_state.expander_events[i] = False
+        # Determine if this is a withdrawal or addition based on sign
+        is_withdrawal = evt['amount'] > 0
+        abs_amount = abs(evt['amount'])
+        event_type = "Withdrawal" if is_withdrawal else "Addition"
+        account_name = evt.get('account_name', 'Unknown Account')
+        
+        # Build label at render time so it reflects current values
+        expander_label = f"**{evt['description']}** - ${abs_amount:,.0f} {event_type} from {account_name} in {evt['year']}"
+        
+        # Use st.container with a manual toggle instead of st.expander for better control
+        container_expanded = st.session_state.get(expander_key, False)
+        
+        # Create a clickable header
+        header_col, remove_col = st.columns([0.95, 0.05])
+        with header_col:
+            arrow = "▼" if container_expanded else "▶"
+            # Use button without container width to keep natural left alignment
+            if st.button(f"{arrow} {expander_label}", key=f"toggle_{expander_key}"):
+                st.session_state[expander_key] = not container_expanded
                 st.rerun()
-            
+        with remove_col:
+            if st.button("🗑️", key=f"remove_evt_{i}", help="Remove this event"):
+                st.session_state.events.pop(i)
+                # Clean up expander state
+                if expander_key in st.session_state:
+                    del st.session_state[expander_key]
+                st.rerun()
+        
+        # Show content if expanded
+        if container_expanded:
             col1, col2 = st.columns(2)
             with col1:
                 evt['year'] = st.number_input(
@@ -880,39 +896,67 @@ with config_tabs[3]:
                 evt['description'] = st.text_input(
                     "Description",
                     value=evt['description'],
-                    key=f"evt_desc_{i}"
+                    key=f"evt_desc_{i}",
+                    help="e.g., 'New car', 'Inheritance from estate', 'Roof replacement'"
                 )
+                
+                # Account selector
+                account_names = [acc['name'] for acc in st.session_state.accounts]
+                if account_names:
+                    current_account = evt.get('account_name', account_names[0])
+                    if current_account not in account_names:
+                        current_account = account_names[0]
+                    account_index = account_names.index(current_account)
+                    evt['account_name'] = st.selectbox(
+                        "Account",
+                        options=account_names,
+                        index=account_index,
+                        key=f"evt_account_{i}",
+                        help="Which investment account will be affected"
+                    )
+                else:
+                    st.warning("⚠️ No accounts configured. Add accounts first.")
+                    evt['account_name'] = "No Account"
+                    
             with col2:
-                evt['amount'] = st.number_input(
+                # Event type selector
+                event_type_current = st.radio(
+                    "Event Type",
+                    options=["Withdrawal", "Addition"],
+                    index=0 if is_withdrawal else 1,
+                    key=f"evt_type_{i}",
+                    horizontal=True,
+                    help="Withdrawal = take money out, Addition = put money in"
+                )
+                
+                # Amount (always positive in UI)
+                amount_input = st.number_input(
                     "Amount ($)",
-                    value=int(evt['amount']),
+                    min_value=0,
+                    value=int(abs_amount),
                     step=1000,
                     key=f"evt_amt_{i}",
-                    help="Positive = expense, Negative = windfall"
+                    help="Enter the amount as a positive number"
                 )
-                st.write("")  # Spacing
+                
+                # Convert back to signed amount for storage
+                evt['amount'] = amount_input if event_type_current == "Withdrawal" else -amount_input
             
-            if st.button(f"🗑️ Remove Event", key=f"remove_evt_{i}"):
-                st.session_state.events.pop(i)
-                # Rebuild expander state dictionary with shifted indices
-                new_state = {}
-                for idx in range(len(st.session_state.events)):
-                    if idx < i:
-                        new_state[idx] = st.session_state.expander_events.get(idx, False)
-                    else:
-                        new_state[idx] = st.session_state.expander_events.get(idx + 1, False)
-                st.session_state.expander_events = new_state
-                st.rerun()
+            st.divider()
     
     if st.button("➕ Add Event"):
         current_year = 2026
         new_index = len(st.session_state.events)
+        # Default to first account if available
+        default_account = st.session_state.accounts[0]['name'] if st.session_state.accounts else 'No Account'
         st.session_state.events.append({
             'year': current_year,
             'description': 'New Event',
-            'amount': 10000
+            'amount': 10000,  # Default to withdrawal
+            'account_name': default_account
         })
-        st.session_state.expander_events[new_index] = True
+        # Auto-open the newly created event
+        st.session_state[f"event_expander_{new_index}"] = True
         st.rerun()
 
 # ===== RUN PROJECTION =====
@@ -946,7 +990,8 @@ events_list = [
     OneTimeEvent(
         year=evt['year'],
         description=evt['description'],
-        amount=evt['amount']
+        amount=evt['amount'],
+        account_name=evt.get('account_name', 'No Account')
     )
     for evt in st.session_state.events
 ]
@@ -1118,21 +1163,28 @@ with config_tabs[4]:
     # Warnings and recommendations
     st.markdown("### ⚠️ Quick Checks")
     
+    # Track if any issues were found
+    issues_found = []
+    
     checks_col1, checks_col2 = st.columns(2)
     
     with checks_col1:
         # Income checks
         if current_total_income == 0 and current_age < work_end_age:
             st.warning("⚠️ No income configured but still before retirement age")
+            issues_found.append(True)
         
         if current_work_income_val > 0 and current_work_income_val < 10000:
             st.info("ℹ️ Work income seems low - verify this is annual (not monthly)")
+            issues_found.append(True)
         
         if current_total_expenses == 0:
             st.warning("⚠️ No expenses configured")
+            issues_found.append(True)
         
         if current_core_expenses == 0:
             st.info("ℹ️ No core expenses - consider adding housing, food, healthcare")
+            issues_found.append(True)
     
     with checks_col2:
         # Expense checks  
@@ -1140,18 +1192,27 @@ with config_tabs[4]:
             expense_ratio = (current_total_expenses / current_total_income) * 100
             if expense_ratio > 100:
                 st.error(f"❌ Expenses are {expense_ratio:.0f}% of income - currently running a deficit")
+                issues_found.append(True)
             elif expense_ratio > 90:
                 st.warning(f"⚠️ Expenses are {expense_ratio:.0f}% of income - very tight budget")
+                issues_found.append(True)
             elif expense_ratio < 30:
                 st.info(f"ℹ️ Expenses are only {expense_ratio:.0f}% of income - verify numbers are annual")
+                issues_found.append(True)
         
         # Contribution checks
         if net_after_contributions < 0:
             shortfall = abs(net_after_contributions)
             st.error(f"❌ Planned contributions exceed available funds by ${shortfall:,.0f}")
+            issues_found.append(True)
         
         if current_planned_contributions > 0 and current_total_income == 0:
             st.warning("⚠️ Planned contributions set but no income configured")
+            issues_found.append(True)
+    
+    # If no issues found, show success message
+    if not issues_found:
+        st.success("✅ All basic validation checks passed! Your current year configuration looks reasonable.")
     
     st.divider()
     
