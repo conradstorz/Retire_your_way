@@ -111,6 +111,12 @@ class UserDataManager:
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Migration: add account_name to user_events
+        try:
+            cursor.execute("ALTER TABLE user_events ADD COLUMN account_name TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         conn.commit()
         conn.close()
     
@@ -313,13 +319,14 @@ class UserDataManager:
         for evt in events:
             cursor.execute("""
                 INSERT INTO user_events 
-                (username, year, description, amount)
-                VALUES (?, ?, ?, ?)
+                (username, year, description, amount, account_name)
+                VALUES (?, ?, ?, ?, ?)
             """, (
                 username,
                 evt['year'],
                 evt['description'],
-                evt['amount']
+                evt['amount'],
+                evt.get('account_name', '')
             ))
         
         conn.commit()
@@ -331,7 +338,7 @@ class UserDataManager:
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT year, description, amount
+            SELECT year, description, amount, account_name
             FROM user_events WHERE username = ? ORDER BY year
         """, (username,))
         
@@ -343,7 +350,8 @@ class UserDataManager:
             events.append({
                 'year': row[0],
                 'description': row[1],
-                'amount': row[2]
+                'amount': row[2],
+                'account_name': row[3] if row[3] else 'No Account'
             })
         
         return events

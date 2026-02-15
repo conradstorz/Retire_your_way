@@ -39,10 +39,11 @@ class ExpenseCategory:
 
 @dataclass
 class OneTimeEvent:
-    """Represents a one-time financial event"""
+    """Represents a one-time portfolio transaction in a specific account"""
     year: int
     description: str
-    amount: float  # Positive = expense, Negative = windfall
+    amount: float  # Positive = withdrawal, Negative = addition
+    account_name: str  # Which account to affect
 
 
 # When contributions must stop, by account type.
@@ -177,16 +178,6 @@ def run_comprehensive_projection(
         core_expenses = core_expenses_base * inflation_multiplier
         flex_expenses_full = flex_expenses_base * inflation_multiplier
 
-        # --- ONE-TIME EVENTS ---
-
-        event_amount = 0
-        event_description = ""
-        for event in events:
-            if event.year == year:
-                event_amount = event.amount
-                event_description = event.description
-                break
-
         # --- PLANNED CONTRIBUTIONS ---
         # Figure out which accounts are eligible and what they want
 
@@ -200,11 +191,11 @@ def run_comprehensive_projection(
         total_planned = sum(planned.values())
 
         # --- FUNDING CONTRIBUTIONS FROM SURPLUS ---
-        # Surplus = income - core expenses - flex expenses - events
+        # Surplus = income - core expenses - flex expenses
         # Contributions are prioritized over flex spending
 
         # How much money is available before touching flex spending?
-        available_for_all = total_income - core_expenses - event_amount
+        available_for_all = total_income - core_expenses
         # This must cover both flex expenses and contributions
 
         flex_expenses_actual = flex_expenses_full
@@ -253,7 +244,7 @@ def run_comprehensive_projection(
                     contributions = {name: 0 for name in planned}
 
         else:
-            # Not even enough income to cover core expenses + events + contributions.
+            # Not even enough income to cover core expenses + contributions.
             # Reduce flex to minimum. Contribute what we can after that.
             flex_expenses_actual = flex_expenses_full * (1 - max_flex_reduction)
             flex_multiplier = 1 - max_flex_reduction if flex_expenses_full > 0 else 1.0
@@ -280,7 +271,7 @@ def run_comprehensive_projection(
         # --- TOTAL EXPENSES (for surplus/deficit calculation) ---
 
         total_expenses_actual = (core_expenses + flex_expenses_actual
-                                 + event_amount + total_contributions)
+                                 + total_contributions)
         surplus_deficit = total_income - total_expenses_actual
 
         # --- WITHDRAWALS (Deficit Coverage) ---
@@ -314,6 +305,25 @@ def run_comprehensive_projection(
             returns[acc.name] = annual_return
             account_balances[acc.name] += annual_return
 
+        # --- ONE-TIME EVENTS (Portfolio Transactions) ---
+        # Apply events as direct additions/withdrawals to specific accounts
+        # This happens AFTER normal income/expense/contribution flow
+
+        event_amount = 0
+        event_description = ""
+        event_account = ""
+        for event in events:
+            if event.year == year:
+                event_amount = event.amount
+                event_description = event.description
+                event_account = event.account_name
+                # Apply the event to the specified account
+                # Positive amount = withdrawal (reduces balance)
+                # Negative amount = addition (increases balance)
+                if event_account in account_balances:
+                    account_balances[event_account] -= event_amount
+                break
+
         # --- PORTFOLIO STATUS ---
 
         total_portfolio = sum(account_balances.values())
@@ -333,6 +343,7 @@ def run_comprehensive_projection(
             'flex_expenses_actual': flex_expenses_actual,
             'event_amount': event_amount,
             'event_description': event_description,
+            'event_account': event_account,
             'total_expenses': total_expenses_actual,
             'surplus_deficit': surplus_deficit,
             'total_contributions': total_contributions,
@@ -359,7 +370,8 @@ def run_comprehensive_projection(
 
 def analyze_retirement_plan(
     projection_df: pd.DataFrame,
-    target_age: int = 90
+    target_age: int = 90,
+    work_end_age: int = None
 ) -> Dict:
     """
     Analyze a retirement projection and return key metrics.
@@ -371,6 +383,8 @@ def analyze_retirement_plan(
     - status: 'ON TRACK' or 'AT RISK'
     - warnings: List of warning messages
     - final_balance: Portfolio value at end of projection
+    - sustainable_withdrawal_annual: Safe annual withdrawal in retirement (if work_end_age provided)
+    - sustainable_withdrawal_monthly: Safe monthly withdrawal in retirement (if work_end_age provided)
     """
     if projection_df.empty:
         return {
@@ -379,7 +393,9 @@ def analyze_retirement_plan(
             'cushion_years': 0,
             'status': 'AT RISK',
             'warnings': ['No projection data'],
-            'final_balance': 0
+            'final_balance': 0,
+            'sustainable_withdrawal_annual': None,
+            'sustainable_withdrawal_monthly': None
         }
 
     warnings = []
@@ -420,26 +436,68 @@ def analyze_retirement_plan(
             f'{avg_flex_multiplier * 100:.0f}% of planned'
         )
 
-    # Check for contribution shortfalls
+    # Check for contribution shortfalls (only warn if it happens while still working)
     if 'contribution_shortfall' in projection_df.columns:
         shortfall_years = projection_df[
             projection_df['contribution_shortfall'] > 0
         ]
         if len(shortfall_years) > 0:
             first_shortfall_age = int(shortfall_years.iloc[0]['age'])
+            first_shortfall_year = int(shortfall_years.iloc[0]['year'])
+            first_year_shortfall = shortfall_years.iloc[0]['contribution_shortfall']
+            monthly_shortfall = first_year_shortfall / 12
             total_shortfall = shortfall_years['contribution_shortfall'].sum()
-            warnings.append(
-                f'Income insufficient to fund planned account contributions '
-                f'starting at age {first_shortfall_age} '
-                f'(${total_shortfall:,.0f} total shortfall). '
-                f'Consider reducing planned contributions for accounts that '
-                f'allow post-retirement contributions (Traditional IRA, Roth IRA, Taxable Brokerage).'
-            )
+            
+            # Check if still working when shortfall starts
+            still_working = shortfall_years.iloc[0]['work_income'] > 0
+            
+            if still_working:
+                # Shortfall while still working - this is a real issue
+                warnings.append(
+                    f'Income insufficient to fund planned account contributions '
+                    f'starting in {first_shortfall_year} (age {first_shortfall_age}). '
+                    f'Monthly shortfall: ${monthly_shortfall:,.0f}/month '
+                    f'(${total_shortfall:,.0f} total over {len(shortfall_years)} years). '
+                    f'Consider increasing income or reducing planned contributions.'
+                )
+            # Note: Post-retirement contribution shortfalls are not warned about.
+            # In retirement, the focus should be on sustainable withdrawals, not contributions.
 
     # Check for early withdrawals
     working_years = projection_df[projection_df['work_income'] > 0]
     if len(working_years) > 0 and working_years['total_withdrawals'].sum() > 0:
         warnings.append('Withdrawing from portfolio while still working')
+
+    # Calculate sustainable withdrawal rate for retirement
+    sustainable_withdrawal_annual = None
+    sustainable_withdrawal_monthly = None
+    
+    if work_end_age is not None:
+        # Find portfolio balance at retirement
+        retirement_row = projection_df[projection_df['age'] == work_end_age]
+        if len(retirement_row) > 0:
+            balance_at_retirement = retirement_row.iloc[0]['total_portfolio']
+            years_in_retirement = 110 - work_end_age
+            
+            # Get average return rate from retirement years data
+            retirement_years = projection_df[projection_df['age'] >= work_end_age]
+            if len(retirement_years) > 0 and 'total_income' in retirement_years.columns:
+                # Calculate sustainable withdrawal using a simple annuity formula
+                # This accounts for investment returns during retirement
+                # Assumes average 5% real return (8% nominal - 3% inflation)
+                real_return = 0.05
+                
+                if years_in_retirement > 0 and balance_at_retirement > 0:
+                    # Annuity payment formula: PV * (r * (1+r)^n) / ((1+r)^n - 1)
+                    if real_return > 0:
+                        sustainable_withdrawal_annual = balance_at_retirement * (
+                            real_return * (1 + real_return) ** years_in_retirement
+                        ) / ((1 + real_return) ** years_in_retirement - 1)
+                    else:
+                        # If no returns, simple division
+                        sustainable_withdrawal_annual = balance_at_retirement / years_in_retirement
+                    
+                    sustainable_withdrawal_monthly = sustainable_withdrawal_annual / 12
 
     return {
         'run_out_age': run_out_age,
@@ -448,5 +506,7 @@ def analyze_retirement_plan(
         'status': status,
         'warnings': warnings,
         'final_balance': (projection_df.iloc[-1]['total_portfolio']
-                          if not projection_df.empty else 0)
+                          if not projection_df.empty else 0),
+        'sustainable_withdrawal_annual': sustainable_withdrawal_annual,
+        'sustainable_withdrawal_monthly': sustainable_withdrawal_monthly
     }

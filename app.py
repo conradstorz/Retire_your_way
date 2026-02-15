@@ -540,13 +540,35 @@ with config_tabs[1]:
 
     # Display current accounts
     for i, acc in enumerate(st.session_state.accounts):
+        # Create a unique key for this account expander
+        expander_key = f"account_expander_{i}"
+        
         # Look up display label for this account's type
         acc_type_label = ACCOUNT_TYPE_LABELS.get(
             acc.get('account_type', 'taxable_brokerage'), 'Taxable Brokerage')
         expander_label = (f"**{acc['name']}** ({acc_type_label}) "
                           f"- ${acc['balance']:,.0f}")
-
-        with st.expander(expander_label, expanded=False):
+        
+        # Use st.container with a manual toggle instead of st.expander for better control
+        container_expanded = st.session_state.get(expander_key, False)
+        
+        # Create a clickable header
+        header_col, remove_col = st.columns([0.95, 0.05])
+        with header_col:
+            arrow = "▼" if container_expanded else "▶"
+            if st.button(f"{arrow} {expander_label}", key=f"toggle_{expander_key}"):
+                st.session_state[expander_key] = not container_expanded
+                st.rerun()
+        with remove_col:
+            if st.button("🗑️", key=f"remove_acc_{i}", help="Remove this account"):
+                st.session_state.accounts.pop(i)
+                # Clean up expander state
+                if expander_key in st.session_state:
+                    del st.session_state[expander_key]
+                st.rerun()
+        
+        # Show content if expanded
+        if container_expanded:
             col1, col2 = st.columns(2)
             with col1:
                 acc['name'] = st.text_input(
@@ -721,10 +743,6 @@ with config_tabs[1]:
                 acc['balance'] = snap_value
                 st.rerun()
 
-            if st.button(f"Remove {acc['name']}", key=f"remove_acc_{i}"):
-                st.session_state.accounts.pop(i)
-                st.rerun()
-
     # Add new account button
     if st.button("Add Account"):
         new_index = len(st.session_state.accounts)
@@ -747,7 +765,32 @@ with config_tabs[2]:
     
     # Display categories
     for i, exp in enumerate(st.session_state.expense_categories):
-        with st.expander(f"**{exp['name']}** - ${exp['amount']:,.0f}/year ({exp['type']})", expanded=False):
+        # Create a unique key for this expense expander
+        expander_key = f"expense_expander_{i}"
+        
+        # Build label at render time so it reflects current values
+        expander_label = f"**{exp['name']}** - ${exp['amount']:,.0f}/year ({exp['type']})"
+        
+        # Use st.container with a manual toggle instead of st.expander for better control
+        container_expanded = st.session_state.get(expander_key, False)
+        
+        # Create a clickable header
+        header_col, remove_col = st.columns([0.95, 0.05])
+        with header_col:
+            arrow = "▼" if container_expanded else "▶"
+            if st.button(f"{arrow} {expander_label}", key=f"toggle_{expander_key}"):
+                st.session_state[expander_key] = not container_expanded
+                st.rerun()
+        with remove_col:
+            if st.button("🗑️", key=f"remove_exp_{i}", help="Remove this expense"):
+                st.session_state.expense_categories.pop(i)
+                # Clean up expander state
+                if expander_key in st.session_state:
+                    del st.session_state[expander_key]
+                st.rerun()
+        
+        # Show content if expanded
+        if container_expanded:
             col1, col2 = st.columns(2)
             with col1:
                 exp['name'] = st.text_input(
@@ -772,10 +815,6 @@ with config_tabs[2]:
                     help="CORE = essential, FLEX = can be reduced if needed"
                 )
                 st.write("")  # Spacing
-            
-            if st.button(f"🗑️ Remove {exp['name']}", key=f"remove_exp_{i}"):
-                st.session_state.expense_categories.pop(i)
-                st.rerun()
     
     # Add new expense
     if st.button("➕ Add Expense Category"):
@@ -1012,7 +1051,7 @@ projection = run_comprehensive_projection(
     max_age=110
 )
 
-analysis = analyze_retirement_plan(projection, target_age=target_age)
+analysis = analyze_retirement_plan(projection, target_age=target_age, work_end_age=work_end_age)
 
 # Look up portfolio balances at key ages
 retirement_row = projection[projection['age'] == work_end_age]
@@ -1073,6 +1112,16 @@ with dashboard_container:
         st.warning("**Warnings:**\n\n" + "\n\n".join(f"- {w}" for w in analysis['warnings']))
     else:
         st.success("No warnings detected. Plan looks solid!")
+    
+    # Show sustainable withdrawal guidance if available
+    if analysis.get('sustainable_withdrawal_monthly') is not None:
+        st.info(
+            f"**💰 Sustainable Retirement Spending:** "
+            f"To make your portfolio last until age 110, you can safely withdraw up to "
+            f"**${analysis['sustainable_withdrawal_monthly']:,.0f}/month** "
+            f"(${analysis['sustainable_withdrawal_annual']:,.0f}/year) starting at retirement (age {work_end_age}). "
+            f"This assumes a 5% real investment return after inflation."
+        )
 
 # --- PROJECTIONS TAB ---
 # --- SANITY CHECKS TAB ---
