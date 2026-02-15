@@ -443,10 +443,10 @@ class UserDataManager:
         default_profile = {
             'current_age': 45,
             'target_age': 90,
-            'work_end_age': 65,
-            'current_work_income': 80000,
+            'work_end_age': 68,
+            'current_work_income': 35000,
             'work_income_growth': 0.02,
-            'ss_start_age': 67,
+            'ss_start_age': 68,
             'ss_monthly_benefit': 2500,
             'ss_cola': 0.025,
             'inflation_rate': 0.03,
@@ -454,21 +454,21 @@ class UserDataManager:
         }
         
         default_accounts = [
-            {'name': '401k', 'account_type': '401k', 'balance': 200000,
-             'return': 0.07, 'contrib_share': 0, 'planned_contribution': 20000, 'priority': 1,
+            {'name': '401k', 'account_type': '401k', 'balance': 2000,
+             'return': 0.08, 'contrib_share': 0, 'planned_contribution': 2700, 'priority': 1,
              'continue_post_retirement': False},
-            {'name': 'Roth IRA', 'account_type': 'roth_ira', 'balance': 50000,
-             'return': 0.07, 'contrib_share': 0, 'planned_contribution': 7000, 'priority': 2,
+            {'name': 'Roth IRA', 'account_type': 'roth_ira', 'balance': 500,
+             'return': 0.08, 'contrib_share': 0, 'planned_contribution': 700, 'priority': 2,
              'continue_post_retirement': False},
         ]
         
         default_expenses = [
-            {'name': 'Housing', 'amount': 24000, 'type': 'CORE'},
-            {'name': 'Food', 'amount': 12000, 'type': 'CORE'},
-            {'name': 'Healthcare', 'amount': 8000, 'type': 'CORE'},
-            {'name': 'Transportation', 'amount': 6000, 'type': 'CORE'},
-            {'name': 'Travel', 'amount': 10000, 'type': 'FLEX'},
-            {'name': 'Entertainment', 'amount': 5000, 'type': 'FLEX'},
+            {'name': 'Housing', 'amount': 12000, 'type': 'CORE'},
+            {'name': 'Food', 'amount': 6000, 'type': 'CORE'},
+            {'name': 'Healthcare', 'amount': 800, 'type': 'CORE'},
+            {'name': 'Transportation', 'amount': 3600, 'type': 'CORE'},
+            {'name': 'Travel', 'amount': 1000, 'type': 'FLEX'},
+            {'name': 'Entertainment', 'amount': 2000, 'type': 'FLEX'},
         ]
         
         default_events = []

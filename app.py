@@ -77,8 +77,14 @@ if authentication_status == False:
     st.error('Username/password is incorrect')
     
     # Password Recovery section
-    with st.expander("🔑 Forgot Password? Recover Account"):
-        st.markdown("Reset your password using your recovery code or security question.")
+    with st.expander("🔑 Forgot Password? Recover Account", expanded=st.session_state.expander_recovery_false):
+        col_header, col_collapse = st.columns([4, 1])
+        with col_header:
+            st.markdown("Reset your password using your recovery code or security question.")
+        with col_collapse:
+            if st.button("✖ Collapse", key="collapse_recovery_false"):
+                st.session_state.expander_recovery_false = False
+                st.rerun()
         
         recovery_method = st.radio(
             "Recovery Method:",
@@ -200,8 +206,14 @@ elif authentication_status == None:
     st.warning('Please enter your username and password')
     
     # Password Recovery section
-    with st.expander("🔑 Forgot Password? Recover Account"):
-        st.markdown("Reset your password using your recovery code or security question.")
+    with st.expander("🔑 Forgot Password? Recover Account", expanded=st.session_state.expander_recovery_none):
+        col_header, col_collapse = st.columns([4, 1])
+        with col_header:
+            st.markdown("Reset your password using your recovery code or security question.")
+        with col_collapse:
+            if st.button("✖ Collapse", key="collapse_recovery_none"):
+                st.session_state.expander_recovery_none = False
+                st.rerun()
         
         recovery_method = st.radio(
             "Recovery Method:",
@@ -258,8 +270,14 @@ elif authentication_status == None:
                         st.error("Please provide the required recovery information")
     
     # Registration section
-    with st.expander("📝 New User Registration"):
-        st.markdown("Create a new account to start planning your retirement.")
+    with st.expander("📝 New User Registration", expanded=st.session_state.expander_registration_none):
+        col_header, col_collapse = st.columns([4, 1])
+        with col_header:
+            st.markdown("Create a new account to start planning your retirement.")
+        with col_collapse:
+            if st.button("✖ Collapse", key="collapse_registration_none"):
+                st.session_state.expander_registration_none = False
+                st.rerun()
         
         with st.form("registration_form_none"):
             new_username = st.text_input("Username")
@@ -347,6 +365,22 @@ if 'events' not in st.session_state:
 
 if 'data_loaded' not in st.session_state:
     st.session_state.data_loaded = True
+
+# Initialize expander states
+if 'expander_recovery_false' not in st.session_state:
+    st.session_state.expander_recovery_false = False
+if 'expander_registration_false' not in st.session_state:
+    st.session_state.expander_registration_false = False
+if 'expander_recovery_none' not in st.session_state:
+    st.session_state.expander_recovery_none = False
+if 'expander_registration_none' not in st.session_state:
+    st.session_state.expander_registration_none = False
+if 'expander_accounts' not in st.session_state:
+    st.session_state.expander_accounts = {}
+if 'expander_expenses' not in st.session_state:
+    st.session_state.expander_expenses = {}
+if 'expander_events' not in st.session_state:
+    st.session_state.expander_events = {}
 
 # Title with user greeting and logout button on same row
 title_col, logout_col = st.columns([4, 1])
@@ -516,13 +550,22 @@ with config_tabs[1]:
 
     # Display current accounts
     for i, acc in enumerate(st.session_state.accounts):
+        # Initialize expander state for this account
+        if i not in st.session_state.expander_accounts:
+            st.session_state.expander_accounts[i] = False
+        
         # Look up display label for this account's type
         acc_type_label = ACCOUNT_TYPE_LABELS.get(
             acc.get('account_type', 'taxable_brokerage'), 'Taxable Brokerage')
         expander_label = (f"**{acc['name']}** ({acc_type_label}) "
                           f"- ${acc['balance']:,.0f}")
 
-        with st.expander(expander_label, expanded=False):
+        with st.expander(expander_label, expanded=st.session_state.expander_accounts[i]):
+            # Collapse button
+            if st.button("✖ Collapse", key=f"collapse_acc_{i}"):
+                st.session_state.expander_accounts[i] = False
+                st.rerun()
+            
             col1, col2 = st.columns(2)
             with col1:
                 acc['name'] = st.text_input(
@@ -699,19 +742,29 @@ with config_tabs[1]:
 
             if st.button(f"Remove {acc['name']}", key=f"remove_acc_{i}"):
                 st.session_state.accounts.pop(i)
+                # Rebuild expander state dictionary with shifted indices
+                new_state = {}
+                for idx in range(len(st.session_state.accounts)):
+                    if idx < i:
+                        new_state[idx] = st.session_state.expander_accounts.get(idx, False)
+                    else:
+                        new_state[idx] = st.session_state.expander_accounts.get(idx + 1, False)
+                st.session_state.expander_accounts = new_state
                 st.rerun()
 
     # Add new account button
     if st.button("Add Account"):
+        new_index = len(st.session_state.accounts)
         st.session_state.accounts.append({
-            'name': f'Account {len(st.session_state.accounts) + 1}',
+            'name': f'Account {new_index + 1}',
             'account_type': 'taxable_brokerage',
-            'balance': 10000,
-            'return': 0.07,
+            'balance': 100,
+            'return': 0.08,
             'contrib_share': 0,
             'planned_contribution': 0,
-            'priority': len(st.session_state.accounts) + 1
+            'priority': new_index + 1
         })
+        st.session_state.expander_accounts[new_index] = True
         st.rerun()
 
     total_balance = sum(acc['balance'] for acc in st.session_state.accounts)
@@ -728,7 +781,16 @@ with config_tabs[2]:
     
     # Display categories
     for i, exp in enumerate(st.session_state.expense_categories):
-        with st.expander(f"**{exp['name']}** - ${exp['amount']:,.0f}/year ({exp['type']})", expanded=False):
+        # Initialize expander state for this expense
+        if i not in st.session_state.expander_expenses:
+            st.session_state.expander_expenses[i] = False
+        
+        with st.expander(f"**{exp['name']}** - ${exp['amount']:,.0f}/year ({exp['type']})", expanded=st.session_state.expander_expenses[i]):
+            # Collapse button
+            if st.button("✖ Collapse", key=f"collapse_exp_{i}"):
+                st.session_state.expander_expenses[i] = False
+                st.rerun()
+            
             col1, col2 = st.columns(2)
             with col1:
                 exp['name'] = st.text_input(
@@ -756,15 +818,25 @@ with config_tabs[2]:
             
             if st.button(f"🗑️ Remove {exp['name']}", key=f"remove_exp_{i}"):
                 st.session_state.expense_categories.pop(i)
+                # Rebuild expander state dictionary with shifted indices
+                new_state = {}
+                for idx in range(len(st.session_state.expense_categories)):
+                    if idx < i:
+                        new_state[idx] = st.session_state.expander_expenses.get(idx, False)
+                    else:
+                        new_state[idx] = st.session_state.expander_expenses.get(idx + 1, False)
+                st.session_state.expander_expenses = new_state
                 st.rerun()
     
     # Add new expense
     if st.button("➕ Add Expense Category"):
+        new_index = len(st.session_state.expense_categories)
         st.session_state.expense_categories.append({
-            'name': f'Category {len(st.session_state.expense_categories) + 1}',
+            'name': f'Category {new_index + 1}',
             'amount': 5000,
             'type': 'FLEX'
         })
+        st.session_state.expander_expenses[new_index] = True
         st.rerun()
     
     # Summary
@@ -786,7 +858,16 @@ with config_tabs[3]:
         st.info("No events configured. Add major one-time expenses or income below.")
     
     for i, evt in enumerate(st.session_state.events):
-        with st.expander(f"**{evt['description']}** - ${evt['amount']:,.0f} in {evt['year']}", expanded=False):
+        # Initialize expander state for this event
+        if i not in st.session_state.expander_events:
+            st.session_state.expander_events[i] = False
+        
+        with st.expander(f"**{evt['description']}** - ${evt['amount']:,.0f} in {evt['year']}", expanded=st.session_state.expander_events[i]):
+            # Collapse button
+            if st.button("✖ Collapse", key=f"collapse_evt_{i}"):
+                st.session_state.expander_events[i] = False
+                st.rerun()
+            
             col1, col2 = st.columns(2)
             with col1:
                 evt['year'] = st.number_input(
@@ -813,15 +894,25 @@ with config_tabs[3]:
             
             if st.button(f"🗑️ Remove Event", key=f"remove_evt_{i}"):
                 st.session_state.events.pop(i)
+                # Rebuild expander state dictionary with shifted indices
+                new_state = {}
+                for idx in range(len(st.session_state.events)):
+                    if idx < i:
+                        new_state[idx] = st.session_state.expander_events.get(idx, False)
+                    else:
+                        new_state[idx] = st.session_state.expander_events.get(idx + 1, False)
+                st.session_state.expander_events = new_state
                 st.rerun()
     
     if st.button("➕ Add Event"):
         current_year = 2026
+        new_index = len(st.session_state.events)
         st.session_state.events.append({
             'year': current_year,
             'description': 'New Event',
             'amount': 10000
         })
+        st.session_state.expander_events[new_index] = True
         st.rerun()
 
 # ===== RUN PROJECTION =====
