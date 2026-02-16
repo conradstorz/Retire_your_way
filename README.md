@@ -1,5 +1,7 @@
 # 💰 Retirement Planning Application
 
+**Version 0.9.0** | [Changelog](CHANGELOG.md) | [License: CC BY-NC-SA 4.0](LICENSE)
+
 A transparent, easy-to-understand retirement planning tool built with Python and Streamlit. This application replaces complex spreadsheet formulas with clear, documented code that anyone can read, verify, and maintain.
 
 **🆕 Multi-User Support:** Each user has their own secure account with personalized data.

@@ -7,6 +7,8 @@ with multiple account buckets, expense categories, and Social Security integrati
 Features multi-user authentication with individual data persistence.
 """
 
+__version__ = "0.9.0"
+
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -371,7 +373,7 @@ if 'data_loaded' not in st.session_state:
 # Title with user greeting and logout button on same row
 title_col, logout_col = st.columns([4, 1])
 with title_col:
-    st.title("💰 Retirement Planning Calculator V2")
+    st.title(f"💰 Retirement Planning Calculator v{__version__}")
 with logout_col:
     st.write("")  # Vertical spacing to align with title
     authenticator.logout(location='main')
