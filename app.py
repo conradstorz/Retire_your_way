@@ -72,6 +72,10 @@ authenticator = stauth.Authenticate(
     config['cookie']['expiry_days']
 )
 
+# Display number of registered accounts on login page
+num_accounts = len(config['credentials']['usernames'])
+st.info(f"ℹ️ {num_accounts} registered account{'s' if num_accounts != 1 else ''}")
+
 # Authentication
 try:
     authenticator.login(location='main')
@@ -546,8 +550,8 @@ with config_tabs[1]:
         # Look up display label for this account's type
         acc_type_label = ACCOUNT_TYPE_LABELS.get(
             acc.get('account_type', 'taxable_brokerage'), 'Taxable Brokerage')
-        expander_label = (f"**{acc['name']}** ({acc_type_label}) "
-                          f"- ${acc['balance']:,.0f}")
+        expander_label = (f"**{acc['name']}** ({acc_type_label}) | "
+                          f"Balance: ${acc['balance']:,.0f}")
         
         # Use st.container with a manual toggle instead of st.expander for better control
         container_expanded = st.session_state.get(expander_key, False)
@@ -769,7 +773,7 @@ with config_tabs[2]:
         expander_key = f"expense_expander_{i}"
         
         # Build label at render time so it reflects current values
-        expander_label = f"**{exp['name']}** - ${exp['amount']:,.0f}/year ({exp['type']})"
+        expander_label = f"**{exp['name']}** | ${exp['amount']:,.0f}/year | {exp['type']}"
         
         # Use st.container with a manual toggle instead of st.expander for better control
         container_expanded = st.session_state.get(expander_key, False)
@@ -900,7 +904,7 @@ with config_tabs[3]:
         account_name = evt.get('account_name', 'Unknown Account')
         
         # Build label at render time so it reflects current values
-        expander_label = f"**{evt['description']}** - ${abs_amount:,.0f} {event_type} from {account_name} in {evt['year']}"
+        expander_label = f"**{evt['description']}** | ${abs_amount:,.0f} {event_type} | {account_name} | {evt['year']}"
         
         # Use st.container with a manual toggle instead of st.expander for better control
         container_expanded = st.session_state.get(expander_key, False)
