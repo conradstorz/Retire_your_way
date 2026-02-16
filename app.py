@@ -1174,7 +1174,7 @@ with dashboard_container:
         st.markdown(
             f"<div style='padding: 10px; background-color: #d1ecf1; border-left: 5px solid #0c5460; border-radius: 5px;'>"
             f"ℹ️ <strong>Conservative Sustainable Retirement Spending:</strong> "
-            f"To make your portfolio last until age 110, you can safely withdraw up to "
+            f"To make your portfolio last until age {target_age}, you can safely withdraw up to "
             f"<span style='font-size: 1.4em; font-weight: bold;'>${monthly_val:,.0f}/month</span> "
             f"(<span style='font-size: 1.4em; font-weight: bold;'>${annual_val:,.0f}/year</span>) "
             f"starting at retirement (age {work_end_age}). "

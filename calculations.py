@@ -589,6 +589,7 @@ def analyze_retirement_plan(
     If accounts and current_age are provided, calculates a separate conservative estimate
     that projects current balances forward at 5.5% real return (8% nominal - 2.5% inflation),
     includes planned contributions, assumes no living expenses withdrawn before retirement.
+    Calculated to last from work_end_age to target_age (not fixed at age 110).
     This is independent from the main projection's assumptions.
     """
     if projection_df.empty:
@@ -634,12 +635,44 @@ def analyze_retirement_plan(
         )
 
     # Check for excessive flexible spending reduction
+    # Only warn if flex spending is reduced AND portfolio shows signs of strain
     avg_flex_multiplier = projection_df['flex_multiplier'].mean()
     if avg_flex_multiplier < 0.8:
-        warnings.append(
-            f'Average flexible spending reduced to '
-            f'{avg_flex_multiplier * 100:.0f}% of planned'
-        )
+        # Get detailed info about flex spending reductions
+        reduced_years = projection_df[projection_df['flex_multiplier'] < 1.0]
+        if len(reduced_years) > 0:
+            # Check if this is a real problem or just accounting from contribution prioritization
+            # If portfolio is healthy and growing, flex reductions aren't concerning
+            
+            # Calculate portfolio health during reduction years
+            avg_portfolio_during_reductions = reduced_years['total_portfolio'].mean()
+            initial_portfolio = projection_df.iloc[0]['total_portfolio']
+            portfolio_growth_factor = avg_portfolio_during_reductions / initial_portfolio if initial_portfolio > 0 else 0
+            
+            # Only warn if portfolio is actually struggling (shrinking or status is AT RISK)
+            portfolio_is_struggling = (portfolio_growth_factor < 0.8 or status == 'AT RISK')
+            
+            if portfolio_is_struggling:
+                min_multiplier = reduced_years['flex_multiplier'].min()
+                first_reduction_age = int(reduced_years.iloc[0]['age'])
+                last_reduction_age = int(reduced_years.iloc[-1]['age'])
+                num_years_reduced = len(reduced_years)
+                
+                # Calculate average planned vs actual flex spending
+                total_planned_flex = projection_df['flex_expenses_full'].sum()
+                total_actual_flex = projection_df['flex_expenses_actual'].sum()
+                lifetime_avg_multiplier = total_actual_flex / total_planned_flex if total_planned_flex > 0 else 1.0
+                
+                warnings.append(
+                    f'Flexible (discretionary) spending frequently reduced below planned levels. '
+                    f'Over your lifetime, you\'ll spend an average of {lifetime_avg_multiplier * 100:.0f}% '
+                    f'of your planned flexible budget. Reductions occur in {num_years_reduced} years '
+                    f'(ages {first_reduction_age}-{last_reduction_age}), with the worst year at '
+                    f'{min_multiplier * 100:.0f}% of planned. This happens because income doesn\'t fully '
+                    f'cover core expenses and contributions, requiring cuts to discretionary spending. '
+                    f'Consider: reducing planned contributions, adjusting retirement age, or accepting '
+                    f'lower discretionary spending in retirement.'
+                )
 
     # Check for contribution shortfalls (only warn if it happens while still working)
     if 'contribution_shortfall' in projection_df.columns:
@@ -686,7 +719,7 @@ def analyze_retirement_plan(
             work_end_age=work_end_age
         )
         
-        years_in_retirement = 110 - work_end_age
+        years_in_retirement = target_age - work_end_age
         CONSERVATIVE_REAL_RETURN = 0.055  # 5.5% real (8% nominal - 2.5% inflation)
         
         if years_in_retirement > 0 and balance_at_retirement > 0:
