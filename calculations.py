@@ -65,6 +65,68 @@ ACCOUNT_TYPE_LABELS = {
     'taxable_brokerage': 'Taxable Brokerage',
 }
 
+# IRS Uniform Lifetime Table for RMD calculations (Publication 590-B)
+# Maps age to distribution period (divisor)
+RMD_LIFETIME_TABLE = {
+    70: 27.4, 71: 26.5, 72: 25.6,  # Added for early RMD ages
+    73: 26.5, 74: 25.5, 75: 24.6, 76: 23.7, 77: 22.9, 78: 22.0, 79: 21.1, 
+    80: 20.2, 81: 19.4, 82: 18.5, 83: 17.7, 84: 16.8, 85: 16.0, 86: 15.2,
+    87: 14.4, 88: 13.7, 89: 12.9, 90: 12.2, 91: 11.5, 92: 10.8, 93: 10.1,
+    94: 9.5, 95: 8.9, 96: 8.4, 97: 7.8, 98: 7.3, 99: 6.8, 100: 6.4,
+    101: 6.0, 102: 5.6, 103: 5.2, 104: 4.9, 105: 4.6, 106: 4.3, 107: 4.1,
+    108: 3.9, 109: 3.7, 110: 3.5, 111: 3.4, 112: 3.3, 113: 3.1, 114: 3.0,
+    115: 2.9, 116: 2.8, 117: 2.7, 118: 2.5, 119: 2.3, 120: 2.0
+}
+
+# Account types subject to RMDs
+RMD_ACCOUNT_TYPES = {'401k', 'traditional_ira'}
+
+
+def get_rmd_starting_age(birth_year: int) -> int:
+    """Determine RMD starting age based on birth year.
+    
+    SECURE Act and SECURE 2.0 Act rules:
+    - Born before July 1, 1949: Age 70.5 (using 70 for simplicity)
+    - Born July 1, 1949 - Dec 31, 1950: Age 72
+    - Born Jan 1, 1951 - Dec 31, 1959: Age 73
+    - Born Jan 1, 1960 or later: Age 75
+    
+    Args:
+        birth_year: Year of birth
+        
+    Returns:
+        Age when RMDs must begin
+    """
+    if birth_year < 1949:
+        return 70  # Actually 70.5, but using 70 for simplicity
+    elif birth_year <= 1950:
+        return 72
+    elif birth_year <= 1959:
+        return 73
+    else:  # 1960 or later
+        return 75
+
+
+def calculate_rmd_amount(account_balance: float, age: int, rmd_starting_age: int) -> float:
+    """Calculate Required Minimum Distribution for an account.
+    
+    RMDs start at different ages depending on birth year (per SECURE Act/SECURE 2.0).
+    Uses IRS Uniform Lifetime Table.
+    
+    Args:
+        account_balance: Current account balance (before RMD)
+        age: Account owner's current age
+        rmd_starting_age: Age when RMDs must begin (varies by birth year)
+        
+    Returns:
+        Required minimum distribution amount (0 if not applicable)
+    """
+    if age < rmd_starting_age:
+        return 0.0
+    
+    divisor = RMD_LIFETIME_TABLE.get(age, 2.0)  # Default to 2.0 for ages beyond table
+    return account_balance / divisor
+
 
 def can_contribute(account_type: str, age: int, work_end_age: int, continue_post_retirement: bool = False) -> bool:
     """Check if an account type is eligible for contributions at a given age.
@@ -139,6 +201,11 @@ def run_comprehensive_projection(
     projection_years = max_age - current_age + 1
     results = []
 
+    # Calculate birth year and determine RMD starting age
+    current_year = 2026  # Base year for projections
+    birth_year = current_year - current_age
+    rmd_starting_age = get_rmd_starting_age(birth_year)
+
     # Sort accounts by priority for withdrawal ordering
     sorted_accounts = sorted(accounts, key=lambda a: a.priority)
 
@@ -153,7 +220,7 @@ def run_comprehensive_projection(
 
     for year_offset in range(projection_years):
         age = current_age + year_offset
-        year = 2026 + year_offset
+        year = current_year + year_offset
 
         # --- INCOME ---
 
@@ -264,15 +331,88 @@ def run_comprehensive_projection(
                 contributions = {name: 0 for name in planned}
                 contribution_shortfall = total_planned
 
+        # --- FUND REMAINING CONTRIBUTIONS FROM PORTFOLIO ---
+        # If income couldn't fully fund contributions (after reducing flex),
+        # withdraw from accounts (by priority) to fund contributions to other accounts.
+        # This enables strategic moves like: withdraw from taxable → contribute to Roth IRA
+        
+        contribution_withdrawals = {acc.name: 0 for acc in accounts}
+        
+        if contribution_shortfall > 0 and total_planned > 0:
+            remaining_shortfall = contribution_shortfall
+            
+            # For each account that needs contributions (proportional to their shortfall)
+            for acc_name, planned_amt in planned.items():
+                if planned_amt == 0:
+                    continue
+                    
+                # How much does this account still need?
+                already_funded = contributions.get(acc_name, 0)
+                this_account_shortfall = planned_amt - already_funded
+                
+                if this_account_shortfall <= 0:
+                    continue
+                
+                # Withdraw from other accounts (by priority) to fund this contribution
+                for source_acc in sorted_accounts:
+                    if this_account_shortfall <= 0:
+                        break
+                    
+                    # Don't withdraw from an account to contribute to itself (circular)
+                    if source_acc.name == acc_name:
+                        continue
+                    
+                    # How much can we withdraw from this source?
+                    available_in_source = account_balances[source_acc.name]
+                    withdrawal_amount = min(this_account_shortfall, available_in_source)
+                    
+                    if withdrawal_amount > 0:
+                        # Record this as a contribution withdrawal (separate from deficit withdrawals)
+                        contribution_withdrawals[source_acc.name] += withdrawal_amount
+                        account_balances[source_acc.name] -= withdrawal_amount
+                        
+                        # Add to this account's contribution
+                        contributions[acc_name] = contributions.get(acc_name, 0) + withdrawal_amount
+                        total_contributions += withdrawal_amount
+                        this_account_shortfall -= withdrawal_amount
+                        remaining_shortfall -= withdrawal_amount
+            
+            # Update shortfall to reflect what couldn't be funded even from portfolio
+            contribution_shortfall = remaining_shortfall
+
         # Apply contributions to account balances
         for acc_name, contrib in contributions.items():
             account_balances[acc_name] += contrib
+
+        # --- REQUIRED MINIMUM DISTRIBUTIONS (RMDs) ---
+        # RMDs are mandatory withdrawals from Traditional IRA and 401(k).
+        # Starting age varies by birth year: 70/72/73/75 (SECURE Act/SECURE 2.0).
+        # These withdrawals count as income for tax purposes but we add them to available cash.
+        # RMDs happen BEFORE regular deficit withdrawals.
+        
+        rmds = {}
+        total_rmds = 0
+        
+        for acc in accounts:
+            if acc.account_type in RMD_ACCOUNT_TYPES:
+                # Calculate RMD based on balance AFTER contributions
+                rmd_amount = calculate_rmd_amount(account_balances[acc.name], age, rmd_starting_age)
+                
+                # Apply the RMD (reduce account balance)
+                actual_rmd = min(rmd_amount, account_balances[acc.name])
+                account_balances[acc.name] -= actual_rmd
+                rmds[acc.name] = actual_rmd
+                total_rmds += actual_rmd
+            else:
+                rmds[acc.name] = 0
 
         # --- TOTAL EXPENSES (for surplus/deficit calculation) ---
 
         total_expenses_actual = (core_expenses + flex_expenses_actual
                                  + total_contributions)
-        surplus_deficit = total_income - total_expenses_actual
+        
+        # RMDs add to available cash (they're forced withdrawals that can cover expenses)
+        surplus_deficit = total_income + total_rmds - total_expenses_actual
 
         # --- WITHDRAWALS (Deficit Coverage) ---
 
@@ -348,6 +488,7 @@ def run_comprehensive_projection(
             'surplus_deficit': surplus_deficit,
             'total_contributions': total_contributions,
             'contribution_shortfall': contribution_shortfall,
+            'total_rmds': total_rmds,
             'total_withdrawals': total_withdrawals,
             'total_portfolio': total_portfolio,
             'portfolio_depleted': portfolio_depleted
@@ -358,6 +499,8 @@ def run_comprehensive_projection(
             year_data[f'{acc.name}_balance'] = account_balances[acc.name]
             year_data[f'{acc.name}_contribution'] = contributions.get(acc.name, 0)
             year_data[f'{acc.name}_withdrawal'] = withdrawals.get(acc.name, 0)
+            year_data[f'{acc.name}_contribution_withdrawal'] = contribution_withdrawals.get(acc.name, 0)
+            year_data[f'{acc.name}_rmd'] = rmds.get(acc.name, 0)
             year_data[f'{acc.name}_return'] = returns.get(acc.name, 0)
 
         results.append(year_data)
@@ -368,13 +511,69 @@ def run_comprehensive_projection(
     return pd.DataFrame(results)
 
 
+def calculate_conservative_retirement_balance(
+    accounts: List[AccountBucket],
+    current_age: int,
+    work_end_age: int
+) -> float:
+    """
+    Calculate a conservative projection of retirement portfolio balance.
+    
+    This is a simplified calculation that:
+    - Starts with current portfolio balances
+    - Includes planned contributions (respecting account type rules)
+    - Grows at fixed 5.5% real return (8% nominal - 2.5% inflation)
+    - Does NOT account for living expenses (conservative assumption)
+    
+    This provides a benchmark separate from the user's detailed projection.
+    
+    Args:
+        accounts: List of investment accounts with current balances and planned contributions
+        current_age: User's current age
+        work_end_age: Age when user plans to stop working
+    
+    Returns:
+        Projected portfolio balance at retirement age
+    """
+    # Conservative assumptions
+    REAL_RETURN = 0.055  # 5.5% real return (8% nominal - 2.5% inflation)
+    
+    # Initialize balances
+    account_balances = {acc.name: acc.balance for acc in accounts}
+    
+    # Project year by year from current age to retirement
+    for year_offset in range(work_end_age - current_age):
+        age = current_age + year_offset
+        
+        # Add contributions for eligible accounts
+        for acc in accounts:
+            if can_contribute(acc.account_type, age, work_end_age, acc.continue_post_retirement):
+                account_balances[acc.name] += acc.planned_contribution
+        
+        # Apply 5.5% real return to all accounts
+        for acc in accounts:
+            account_balances[acc.name] *= (1 + REAL_RETURN)
+    
+    # Return total portfolio value at retirement
+    return sum(account_balances.values())
+
+
 def analyze_retirement_plan(
     projection_df: pd.DataFrame,
     target_age: int = 90,
-    work_end_age: int = None
+    work_end_age: int = None,
+    accounts: Optional[List[AccountBucket]] = None,
+    current_age: Optional[int] = None
 ) -> Dict:
     """
     Analyze a retirement projection and return key metrics.
+    
+    Args:
+        projection_df: DataFrame from run_comprehensive_projection()
+        target_age: Target age for retirement planning (default 90)
+        work_end_age: Age when work income stops
+        accounts: List of AccountBucket objects (optional, for conservative calculation)
+        current_age: User's current age (optional, for conservative calculation)
 
     Returns dictionary with:
     - run_out_age: Age when money runs out (or None if never)
@@ -383,8 +582,14 @@ def analyze_retirement_plan(
     - status: 'ON TRACK' or 'AT RISK'
     - warnings: List of warning messages
     - final_balance: Portfolio value at end of projection
-    - sustainable_withdrawal_annual: Safe annual withdrawal in retirement (if work_end_age provided)
-    - sustainable_withdrawal_monthly: Safe monthly withdrawal in retirement (if work_end_age provided)
+    - sustainable_withdrawal_annual: Conservative safe annual withdrawal (if accounts provided)
+    - sustainable_withdrawal_monthly: Conservative safe monthly withdrawal (if accounts provided)
+    
+    Conservative Sustainable Withdrawal:
+    If accounts and current_age are provided, calculates a separate conservative estimate
+    that projects current balances forward at 5.5% real return (8% nominal - 2.5% inflation),
+    includes planned contributions, assumes no living expenses withdrawn before retirement.
+    This is independent from the main projection's assumptions.
     """
     if projection_df.empty:
         return {
@@ -468,36 +673,29 @@ def analyze_retirement_plan(
     if len(working_years) > 0 and working_years['total_withdrawals'].sum() > 0:
         warnings.append('Withdrawing from portfolio while still working')
 
-    # Calculate sustainable withdrawal rate for retirement
+    # Calculate conservative sustainable withdrawal rate for retirement
     sustainable_withdrawal_annual = None
     sustainable_withdrawal_monthly = None
     
-    if work_end_age is not None:
-        # Find portfolio balance at retirement
-        retirement_row = projection_df[projection_df['age'] == work_end_age]
-        if len(retirement_row) > 0:
-            balance_at_retirement = retirement_row.iloc[0]['total_portfolio']
-            years_in_retirement = 110 - work_end_age
+    if work_end_age is not None and accounts is not None and current_age is not None:
+        # Use conservative calculation: 5.5% real return (8% nominal - 2.5% inflation)
+        # This projects current portfolio forward with contributions but no expense withdrawals
+        balance_at_retirement = calculate_conservative_retirement_balance(
+            accounts=accounts,
+            current_age=current_age,
+            work_end_age=work_end_age
+        )
+        
+        years_in_retirement = 110 - work_end_age
+        CONSERVATIVE_REAL_RETURN = 0.055  # 5.5% real (8% nominal - 2.5% inflation)
+        
+        if years_in_retirement > 0 and balance_at_retirement > 0:
+            # Annuity payment formula: PV * (r * (1+r)^n) / ((1+r)^n - 1)
+            sustainable_withdrawal_annual = balance_at_retirement * (
+                CONSERVATIVE_REAL_RETURN * (1 + CONSERVATIVE_REAL_RETURN) ** years_in_retirement
+            ) / ((1 + CONSERVATIVE_REAL_RETURN) ** years_in_retirement - 1)
             
-            # Get average return rate from retirement years data
-            retirement_years = projection_df[projection_df['age'] >= work_end_age]
-            if len(retirement_years) > 0 and 'total_income' in retirement_years.columns:
-                # Calculate sustainable withdrawal using a simple annuity formula
-                # This accounts for investment returns during retirement
-                # Assumes average 5% real return (8% nominal - 3% inflation)
-                real_return = 0.05
-                
-                if years_in_retirement > 0 and balance_at_retirement > 0:
-                    # Annuity payment formula: PV * (r * (1+r)^n) / ((1+r)^n - 1)
-                    if real_return > 0:
-                        sustainable_withdrawal_annual = balance_at_retirement * (
-                            real_return * (1 + real_return) ** years_in_retirement
-                        ) / ((1 + real_return) ** years_in_retirement - 1)
-                    else:
-                        # If no returns, simple division
-                        sustainable_withdrawal_annual = balance_at_retirement / years_in_retirement
-                    
-                    sustainable_withdrawal_monthly = sustainable_withdrawal_annual / 12
+            sustainable_withdrawal_monthly = sustainable_withdrawal_annual / 12
 
     return {
         'run_out_age': run_out_age,

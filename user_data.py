@@ -464,10 +464,10 @@ class UserDataManager:
         default_accounts = [
             {'name': '401k', 'account_type': '401k', 'balance': 2000,
              'return': 0.08, 'contrib_share': 0, 'planned_contribution': 2700, 'priority': 1,
-             'continue_post_retirement': False},
+             'continue_post_retirement': False},  # 401k contributions must stop at retirement
             {'name': 'Roth IRA', 'account_type': 'roth_ira', 'balance': 500,
              'return': 0.08, 'contrib_share': 0, 'planned_contribution': 700, 'priority': 2,
-             'continue_post_retirement': False},
+             'continue_post_retirement': True},  # Roth IRA can continue indefinitely if you have income
         ]
         
         default_expenses = [

@@ -426,7 +426,12 @@ config_tabs = st.tabs(["📋 Profile", "💰 Accounts", "🏠 Expenses", "📅 O
 
 # --- PROFILE TAB ---
 with config_tabs[0]:
-    st.subheader("Personal Profile")
+    header_col1, header_col2 = st.columns([3, 1])
+    with header_col1:
+        st.subheader("Personal Profile")
+    with header_col2:
+        st.write("")
+        save_profile_clicked = st.button("💾 Save All Configuration", type="primary", key="save_all_config_header")
 
     prof_col1, prof_col2 = st.columns(2)
 
@@ -503,8 +508,18 @@ with config_tabs[0]:
             help="Maximum reduction allowed for flexible expenses before withdrawing from portfolio"
         ) / 100
 
+    # Display RMD starting age based on birth year
+    from calculations import get_rmd_starting_age
+    current_year = 2026
+    birth_year = current_year - current_age
+    rmd_starting_age = get_rmd_starting_age(birth_year)
+    
     st.divider()
-    if st.button("💾 Save All Configuration", type="primary"):
+    st.info(f"📋 **Tax Info:** Based on your birth year ({birth_year}), Required Minimum Distributions (RMDs) "
+            f"from Traditional IRA and 401(k) accounts will begin at age **{rmd_starting_age}**.")
+
+    # Handle save button click
+    if save_profile_clicked:
         profile_data = {
             'current_age': current_age,
             'target_age': target_age,
@@ -524,9 +539,18 @@ with config_tabs[0]:
         st.success("Configuration saved!")
         st.balloons()
 
+
 # --- ACCOUNTS TAB ---
 with config_tabs[1]:
-    st.subheader("Investment Accounts")
+    header_col1, header_col2 = st.columns([3, 1])
+    with header_col1:
+        st.subheader("Investment Accounts")
+    with header_col2:
+        st.write("")
+        if st.button("💾 Save Accounts", key="save_accounts_header", type="primary"):
+            db_manager.save_user_accounts(username, st.session_state.accounts)
+            st.success("Accounts saved!")
+    
     st.caption("Each account has a type (which controls contribution rules), a planned annual "
                "contribution, and a withdrawal priority. Deficits withdraw in priority order (1 = first).")
 
@@ -590,7 +614,7 @@ with config_tabs[1]:
                         index=type_index,
                         format_func=lambda x: account_type_display[x],
                         key=f"acc_type_{i}",
-                        help="Controls when contributions stop"
+                        help="Controls contribution limits and RMDs. 401(k) and Traditional IRA require RMDs starting at age 70/72/73/75 (varies by birth year per SECURE Act 2.0)."
                     )
                 ]
                 acc['balance'] = st.number_input(
@@ -604,7 +628,6 @@ with config_tabs[1]:
                 acc['return'] = st.number_input(
                     "Expected Annual Return (%)",
                     min_value=0.0,
-                    max_value=20.0,
                     value=float(acc['return'] * 100),
                     step=0.5,
                     key=f"acc_ret_{i}"
@@ -623,8 +646,8 @@ with config_tabs[1]:
                 if acc_type in ['traditional_ira', 'roth_ira', 'taxable_brokerage']:
                     # Create account-specific help text
                     help_texts = {
-                        'traditional_ira': "If checked, contributions continue until age 73 (IRS limit). Requires earned income.",
-                        'roth_ira': "If checked, contributions continue indefinitely. Requires earned income and income limits apply.",
+                        'traditional_ira': "If checked, contributions continue until age 73 (IRS limit). RMDs start at age 70/72/73/75 depending on birth year. Requires earned income.",
+                        'roth_ira': "If checked, contributions continue indefinitely. No RMDs required. Requires earned income and income limits apply.",
                         'taxable_brokerage': "If checked, contributions continue indefinitely as long as you have income."
                     }
                     acc['continue_post_retirement'] = st.checkbox(
@@ -761,10 +784,20 @@ with config_tabs[1]:
         })
         st.session_state.expander_accounts[new_index] = True
         st.rerun()
+    
+
 
 # --- EXPENSES TAB ---
 with config_tabs[2]:
-    st.subheader("Expense Categories")
+    header_col1, header_col2 = st.columns([3, 1])
+    with header_col1:
+        st.subheader("Expense Categories")
+    with header_col2:
+        st.write("")
+        if st.button("💾 Save Expenses", key="save_expenses_header", type="primary"):
+            db_manager.save_user_expenses(username, st.session_state.expense_categories)
+            st.success("Expenses saved!")
+    
     st.caption("CORE expenses cannot be reduced. FLEX expenses can be cut up to the max % if needed.")
     
     # Display categories
@@ -839,10 +872,19 @@ with config_tabs[2]:
     col1.metric("Total CORE", f"${total_core:,.0f}/year")
     col2.metric("Total FLEX", f"${total_flex:,.0f}/year")
     col3.metric("Total Expenses", f"${total_expenses:,.0f}/year")
+    
+
 
 # --- EVENTS TAB ---
 with config_tabs[3]:
-    st.subheader("One-Time Financial Events")
+    header_col1, header_col2 = st.columns([3, 1])
+    with header_col1:
+        st.subheader("One-Time Financial Events")
+    with header_col2:
+        st.write("")
+        if st.button("💾 Save Events", key="save_events_header", type="primary"):
+            db_manager.save_user_events(username, st.session_state.events)
+            st.success("Events saved!")
     
     # Add custom CSS for left-aligned event buttons
     st.markdown("""
@@ -1001,6 +1043,8 @@ with config_tabs[3]:
         # Auto-open the newly created event
         st.session_state[f"event_expander_{new_index}"] = True
         st.rerun()
+    
+
 
 # ===== RUN PROJECTION =====
 # Computed after all config tabs so it uses current widget values.
@@ -1055,7 +1099,13 @@ projection = run_comprehensive_projection(
     max_age=110
 )
 
-analysis = analyze_retirement_plan(projection, target_age=target_age, work_end_age=work_end_age)
+analysis = analyze_retirement_plan(
+    projection, 
+    target_age=target_age, 
+    work_end_age=work_end_age,
+    accounts=accounts,
+    current_age=current_age
+)
 
 # Look up portfolio balances at key ages
 retirement_row = projection[projection['age'] == work_end_age]
@@ -1119,12 +1169,22 @@ with dashboard_container:
     
     # Show sustainable withdrawal guidance if available
     if analysis.get('sustainable_withdrawal_monthly') is not None:
-        st.info(
-            f"**💰 Sustainable Retirement Spending:** "
+        monthly_val = analysis['sustainable_withdrawal_monthly']
+        annual_val = analysis['sustainable_withdrawal_annual']
+        st.markdown(
+            f"<div style='padding: 10px; background-color: #d1ecf1; border-left: 5px solid #0c5460; border-radius: 5px;'>"
+            f"ℹ️ <strong>Conservative Sustainable Retirement Spending:</strong> "
             f"To make your portfolio last until age 110, you can safely withdraw up to "
-            f"**${analysis['sustainable_withdrawal_monthly']:,.0f}/month** "
-            f"(${analysis['sustainable_withdrawal_annual']:,.0f}/year) starting at retirement (age {work_end_age}). "
-            f"This assumes a 5% real investment return after inflation."
+            f"<span style='font-size: 1.4em; font-weight: bold;'>${monthly_val:,.0f}/month</span> "
+            f"(<span style='font-size: 1.4em; font-weight: bold;'>${annual_val:,.0f}/year</span>) "
+            f"starting at retirement (age {work_end_age}). "
+            f"<br><br>"
+            f"<em style='font-size: 0.9em;'>This conservative estimate uses different assumptions than your main projection: "
+            f"8% nominal investment return, 2.5% inflation (5.5% real return), includes your planned contributions, "
+            f"and assumes your portfolio compounds without withdrawals before retirement. "
+            f"This provides a benchmark independent from your custom account settings and expense projections.</em>"
+            f"</div>",
+            unsafe_allow_html=True
         )
 
 # --- PROJECTIONS TAB ---
