@@ -360,10 +360,54 @@ if 'events' not in st.session_state:
 if 'data_loaded' not in st.session_state:
     st.session_state.data_loaded = True
 
-# Title with user greeting and logout button on same row
-title_col, logout_col = st.columns([4, 1])
+if 'show_import' not in st.session_state:
+    st.session_state.show_import = False
+
+# Title with data management and logout button on same row
+title_col, data_col, logout_col = st.columns([3, 1, 1])
 with title_col:
     st.title(f"💰 Retirement Planning Calculator v{__version__}")
+
+with data_col:
+    import json
+    from datetime import datetime
+    
+    # Export all user data as JSON
+    all_user_data = {
+        "export_date": datetime.now().isoformat(),
+        "username": username,
+        "version": "1.0.0",
+        "profile": user_profile,
+        "accounts": user_accounts,
+        "expenses": user_expenses,
+        "events": user_events
+    }
+    
+    # Add snapshots for each account
+    all_snapshots = {}
+    for account in user_accounts:
+        snapshots = db_manager.load_snapshots(username, account['name'])
+        if snapshots:
+            all_snapshots[account['name']] = snapshots
+    
+    if all_snapshots:
+        all_user_data["snapshots"] = all_snapshots
+    
+    json_data = json.dumps(all_user_data, indent=2)
+    
+    st.download_button(
+        label="💾 Export Data",
+        data=json_data,
+        file_name=f"retirement_data_{username}_{datetime.now().strftime('%Y%m%d')}.json",
+        mime="application/json",
+        help="Export all your configuration data",
+        use_container_width=True
+    )
+    
+    # Import data button
+    if st.button("📥 Import Data", use_container_width=True, help="Restore from backup file"):
+        st.session_state.show_import = True
+
 with logout_col:
     st.write("")  # Vertical spacing to align with title
     authenticator.logout(location='main')
@@ -376,6 +420,225 @@ This is a work-in-progress. Please ignore the icon buttons at the top right of t
 I appologise for changes to the apperance from day to day.
 Please reach out with feedback!
 """)
+
+# Import data dialog
+if st.session_state.get('show_import', False):
+    import json
+    
+    st.divider()
+    st.subheader("📥 Import Configuration Data")
+    st.warning("⚠️ **Warning:** This will replace your current configuration!")
+    
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        uploaded_file = st.file_uploader("Choose a JSON backup file", type=['json'], key="import_json_header")
+    with col2:
+        st.write("")  # Spacing
+        if st.button("❌ Cancel", key="cancel_import"):
+            st.session_state.show_import = False
+            st.rerun()
+    
+    if uploaded_file is not None:
+        try:
+            imported_data = json.load(uploaded_file)
+            
+            # Validate data structure and collect warnings
+            validation_warnings = []
+            validation_errors = []
+            importable_sections = {
+                'profile': False,
+                'accounts': False,
+                'expenses': False,
+                'events': False,
+                'snapshots': False
+            }
+            
+            # Validate profile
+            if 'profile' in imported_data and isinstance(imported_data['profile'], dict):
+                profile = imported_data['profile']
+                required_profile_fields = ['current_age', 'target_age', 'work_end_age']
+                missing_fields = [f for f in required_profile_fields if f not in profile]
+                if missing_fields:
+                    validation_errors.append(f"Profile missing required fields: {', '.join(missing_fields)}")
+                else:
+                    importable_sections['profile'] = True
+            elif 'profile' in imported_data:
+                validation_errors.append("Profile data is malformed (not a dictionary)")
+            else:
+                validation_warnings.append("Profile data not found in file")
+            
+            # Validate accounts
+            if 'accounts' in imported_data and isinstance(imported_data['accounts'], list):
+                accounts = imported_data['accounts']
+                for i, acc in enumerate(accounts):
+                    if not isinstance(acc, dict):
+                        validation_errors.append(f"Account #{i+1} is malformed")
+                    elif 'name' not in acc or 'balance' not in acc:
+                        validation_errors.append(f"Account #{i+1} missing required fields (name, balance)")
+                if not validation_errors or len([e for e in validation_errors if 'Account' in e]) < len(accounts):
+                    importable_sections['accounts'] = True
+            elif 'accounts' in imported_data:
+                validation_errors.append("Accounts data is malformed (not a list)")
+            else:
+                validation_warnings.append("Accounts data not found in file")
+            
+            # Validate expenses
+            if 'expenses' in imported_data and isinstance(imported_data['expenses'], list):
+                expenses = imported_data['expenses']
+                for i, exp in enumerate(expenses):
+                    if not isinstance(exp, dict):
+                        validation_errors.append(f"Expense #{i+1} is malformed")
+                    elif 'name' not in exp or 'amount' not in exp or 'type' not in exp:
+                        validation_errors.append(f"Expense #{i+1} missing required fields (name, amount, type)")
+                if not validation_errors or len([e for e in validation_errors if 'Expense' in e]) < len(expenses):
+                    importable_sections['expenses'] = True
+            elif 'expenses' in imported_data:
+                validation_errors.append("Expenses data is malformed (not a list)")
+            else:
+                validation_warnings.append("Expenses data not found in file")
+            
+            # Validate events
+            if 'events' in imported_data and isinstance(imported_data['events'], list):
+                importable_sections['events'] = True
+            elif 'events' in imported_data:
+                validation_errors.append("Events data is malformed (not a list)")
+            else:
+                validation_warnings.append("Events data not found in file")
+            
+            # Validate snapshots
+            if 'snapshots' in imported_data and isinstance(imported_data['snapshots'], dict):
+                importable_sections['snapshots'] = True
+            elif 'snapshots' in imported_data:
+                validation_warnings.append("Snapshots data is malformed (will be skipped)")
+            
+            # Display validation results
+            if validation_errors:
+                st.error("**❌ Validation Errors Found:**")
+                for error in validation_errors:
+                    st.error(f"• {error}")
+                st.warning("**Import is disabled due to errors.** Please fix the backup file or contact support.")
+            
+            if validation_warnings:
+                st.warning("**⚠️ Validation Warnings:**")
+                for warning in validation_warnings:
+                    st.warning(f"• {warning}")
+            
+            # Show what will be imported
+            if not validation_errors:
+                # Format snapshot count
+                if importable_sections['snapshots']:
+                    snapshot_count = len(imported_data.get('snapshots', {}))
+                    snapshot_text = f"{snapshot_count} account{'s' if snapshot_count != 1 else ''} with history"
+                else:
+                    snapshot_text = '✗ (missing or invalid)'
+                
+                # Format other counts
+                accounts_text = f"{len(imported_data.get('accounts', []))} account{'s' if len(imported_data.get('accounts', [])) != 1 else ''}" if importable_sections['accounts'] else '✗ (missing or invalid)'
+                expenses_text = f"{len(imported_data.get('expenses', []))} categor{'ies' if len(imported_data.get('expenses', [])) != 1 else 'y'}" if importable_sections['expenses'] else '✗ (missing or invalid)'
+                events_text = f"{len(imported_data.get('events', []))} event{'s' if len(imported_data.get('events', [])) != 1 else ''}" if importable_sections['events'] else '✗ (missing or invalid)'
+                
+                st.info(f"""
+                **File Details:**
+                - Export Date: {imported_data.get('export_date', 'Unknown')}
+                - Version: {imported_data.get('version', 'Unknown')}
+                - Original Username: {imported_data.get('username', 'Unknown')}
+                
+                **Data Available to Import:**
+                - Profile: {'✓' if importable_sections['profile'] else '✗ (missing or invalid)'}
+                - Accounts: {accounts_text}
+                - Expenses: {expenses_text}
+                - Events: {events_text}
+                - Snapshots: {snapshot_text}
+                """)
+                
+                if st.button("✅ Confirm Import", type="primary", key="confirm_import_header", 
+                           disabled=(not any(importable_sections.values()))):
+                    # Track import results
+                    import_results = []
+                    import_errors = []
+                    
+                    try:
+                        # Import profile
+                        if importable_sections['profile']:
+                            try:
+                                db_manager.save_user_profile(username, imported_data['profile'])
+                                import_results.append("✅ Profile")
+                            except Exception as e:
+                                import_errors.append(f"Profile: {str(e)}")
+                        
+                        # Import accounts
+                        if importable_sections['accounts']:
+                            try:
+                                db_manager.save_user_accounts(username, imported_data['accounts'])
+                                st.session_state.accounts = imported_data['accounts'].copy()
+                                import_results.append(f"✅ Accounts ({len(imported_data['accounts'])})")
+                            except Exception as e:
+                                import_errors.append(f"Accounts: {str(e)}")
+                        
+                        # Import expenses
+                        if importable_sections['expenses']:
+                            try:
+                                db_manager.save_user_expenses(username, imported_data['expenses'])
+                                st.session_state.expense_categories = imported_data['expenses'].copy()
+                                import_results.append(f"✅ Expenses ({len(imported_data['expenses'])})")
+                            except Exception as e:
+                                import_errors.append(f"Expenses: {str(e)}")
+                        
+                        # Import events
+                        if importable_sections['events']:
+                            try:
+                                db_manager.save_user_events(username, imported_data['events'])
+                                st.session_state.events = imported_data['events'].copy()
+                                import_results.append(f"✅ Events ({len(imported_data['events'])})")
+                            except Exception as e:
+                                import_errors.append(f"Events: {str(e)}")
+                        
+                        # Import snapshots
+                        if importable_sections['snapshots']:
+                            try:
+                                snapshot_count = 0
+                                for account_name, snapshots in imported_data['snapshots'].items():
+                                    for snapshot in snapshots:
+                                        if all(k in snapshot for k in ['date', 'contributed', 'total_value']):
+                                            db_manager.save_snapshot(
+                                                username,
+                                                account_name,
+                                                snapshot['date'],
+                                                snapshot['contributed'],
+                                                snapshot['total_value']
+                                            )
+                                            snapshot_count += 1
+                                if snapshot_count > 0:
+                                    import_results.append(f"✅ Snapshots ({snapshot_count})")
+                            except Exception as e:
+                                import_errors.append(f"Snapshots: {str(e)}")
+                        
+                        # Clear the import flag
+                        st.session_state.show_import = False
+                        
+                        # Show results
+                        if import_results and not import_errors:
+                            st.success(f"✅ **Import Complete!** Imported: {', '.join(import_results)}")
+                            st.balloons()
+                        elif import_results and import_errors:
+                            st.warning(f"⚠️ **Partial Import:** {', '.join(import_results)}")
+                            st.error(f"**Failed:** {'; '.join(import_errors)}")
+                        else:
+                            st.error(f"❌ **Import Failed:** {'; '.join(import_errors)}")
+                        
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"❌ Unexpected error during import: {str(e)}")
+                        st.session_state.show_import = False
+                
+        except json.JSONDecodeError as e:
+            st.error(f"❌ **Invalid JSON file:** {str(e)}")
+            st.info("The file is not valid JSON. Please check the file format.")
+        except Exception as e:
+            st.error(f"❌ **Error reading file:** {str(e)}")
+    
+    st.divider()
 
 # ===== DASHBOARD PLACEHOLDER =====
 # Reserve space at the top for the dashboard. It gets filled in AFTER the
@@ -1562,11 +1825,13 @@ with config_tabs[5]:
     )
 
     csv = projection.to_csv(index=False)
+    
     st.download_button(
-        label="Download Complete Projection (CSV)",
+        label="📊 Download Projection (CSV)",
         data=csv,
         file_name="retirement_projection_detailed.csv",
-        mime="text/csv"
+        mime="text/csv",
+        help="Download the detailed year-by-year projection data"
     )
 
 # Footer

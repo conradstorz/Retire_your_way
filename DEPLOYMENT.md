@@ -362,7 +362,7 @@ See [PERSISTENT_STORAGE_GUIDE.md](PERSISTENT_STORAGE_GUIDE.md) for more troubles
 
 ---
 
-## í¾¯ Recommended Deployment Path
+## ï¿½ï¿½ï¿½ Recommended Deployment Path
 
 **Choose based on your needs:**
 
@@ -380,7 +380,7 @@ See [PERSISTENT_STORAGE_GUIDE.md](PERSISTENT_STORAGE_GUIDE.md) for more troubles
 
 ---
 
-## í²¡ Tips for Success
+## ï¿½ï¿½ï¿½ Tips for Success
 
 1. **Start Small**: Deploy locally first, test thoroughly
 2. **Test Persistence**: After cloud deployment, register a user, restart the app, verify data remains
@@ -390,7 +390,7 @@ See [PERSISTENT_STORAGE_GUIDE.md](PERSISTENT_STORAGE_GUIDE.md) for more troubles
 
 ---
 
-## í³š Additional Resources
+## ï¿½ï¿½ï¿½ Additional Resources
 
 - **Persistent Storage Setup**: [PERSISTENT_STORAGE_GUIDE.md](PERSISTENT_STORAGE_GUIDE.md)
 - **Supabase Docs**: https://supabase.com/docs
@@ -400,7 +400,7 @@ See [PERSISTENT_STORAGE_GUIDE.md](PERSISTENT_STORAGE_GUIDE.md) for more troubles
 
 ---
 
-## í¾‰ Next Steps
+## ï¿½ï¿½ï¿½ Next Steps
 
 1. **Read** [PERSISTENT_STORAGE_GUIDE.md](PERSISTENT_STORAGE_GUIDE.md) for detailed setup
 2. **Choose** your deployment platform
@@ -410,4 +410,4 @@ See [PERSISTENT_STORAGE_GUIDE.md](PERSISTENT_STORAGE_GUIDE.md) for more troubles
 
 **Questions?** Open an issue on GitHub or check the documentation.
 
-**Congratulations on deploying your retirement planner! íº€**
+**Congratulations on deploying your retirement planner! ï¿½ï¿½ï¿½**
