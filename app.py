@@ -7,7 +7,7 @@ with multiple account buckets, expense categories, and Social Security integrati
 Features multi-user authentication with individual data persistence.
 """
 
-__version__ = "0.9.0"
+__version__ = "1.0.0"
 
 import streamlit as st
 import pandas as pd
@@ -23,17 +23,7 @@ from calculations import (
     run_comprehensive_projection,
     analyze_retirement_plan
 )
-from auth_config import (
-    load_credentials, 
-    register_new_user, 
-    init_credentials_file,
-    generate_recovery_code,
-    add_recovery_code,
-    add_security_question,
-    get_security_question,
-    reset_password_with_recovery,
-    reset_password_with_security_question
-)
+from auth_db import get_auth_manager
 from user_data import UserDataManager
 
 # Page configuration
@@ -60,11 +50,11 @@ if 'expander_expenses' not in st.session_state:
 if 'expander_events' not in st.session_state:
     st.session_state.expander_events = {}
 
-# Initialize credentials file
-init_credentials_file()
+# Initialize authentication manager
+auth_manager = get_auth_manager()
 
 # Load authentication configuration
-config = load_credentials()
+config = auth_manager.get_credentials_config()
 
 # Create authenticator object
 authenticator = stauth.Authenticate(
@@ -116,7 +106,7 @@ if authentication_status == False:
                 security_answer = None
             else:
                 if recover_username:
-                    security_q = get_security_question(recover_username)
+                    security_q = auth_manager.get_security_question(recover_username)
                     if security_q:
                         st.info(f"**Your Security Question:** {security_q}")
                         security_answer = st.text_input("Answer")
@@ -141,13 +131,13 @@ if authentication_status == False:
                     st.error("Password must be at least 6 characters")
                 else:
                     if recovery_method == "Recovery Code" and recovery_code_input:
-                        if reset_password_with_recovery(recover_username, recovery_code_input, new_pass):
+                        if auth_manager.verify_recovery_code(recover_username, recovery_code_input) and auth_manager.change_password(recover_username, new_pass):
                             st.success("✅ Password reset successful! Please login with your new password.")
                             st.balloons()
                         else:
                             st.error("Invalid username or recovery code")
                     elif recovery_method == "Security Question" and security_answer:
-                        if reset_password_with_security_question(recover_username, security_answer, new_pass):
+                        if auth_manager.verify_security_answer(recover_username, security_answer) and auth_manager.change_password(recover_username, new_pass):
                             st.success("✅ Password reset successful! Please login with your new password.")
                             st.balloons()
                         else:
@@ -191,14 +181,14 @@ if authentication_status == False:
                 elif len(new_password) < 6:
                     st.error("Password must be at least 6 characters")
                 else:
-                    if register_new_user(new_username, new_name, new_password, new_email):
+                    if auth_manager.register_user(new_username, new_name, new_password, new_email):
                         # Generate and display recovery code
-                        recovery_code = generate_recovery_code()
-                        add_recovery_code(new_username, recovery_code)
+                        recovery_code = auth_manager.generate_recovery_code()
+                        auth_manager.add_recovery_code(new_username, recovery_code)
                         
                         # Add security question if provided
                         if security_question and security_answer:
-                            add_security_question(new_username, security_question, security_answer)
+                            auth_manager.add_security_question(new_username, security_question, security_answer)
                         
                         st.success("✅ Registration successful!")
                         st.info(f"""
@@ -240,7 +230,7 @@ elif authentication_status == None:
                 security_answer = None
             else:
                 if recover_username:
-                    security_q = get_security_question(recover_username)
+                    security_q = auth_manager.get_security_question(recover_username)
                     if security_q:
                         st.info(f"**Your Security Question:** {security_q}")
                         security_answer = st.text_input("Answer")
@@ -265,13 +255,13 @@ elif authentication_status == None:
                     st.error("Password must be at least 6 characters")
                 else:
                     if recovery_method == "Recovery Code" and recovery_code_input:
-                        if reset_password_with_recovery(recover_username, recovery_code_input, new_pass):
+                        if auth_manager.verify_recovery_code(recover_username, recovery_code_input) and auth_manager.change_password(recover_username, new_pass):
                             st.success("✅ Password reset successful! Please login with your new password.")
                             st.balloons()
                         else:
                             st.error("Invalid username or recovery code")
                     elif recovery_method == "Security Question" and security_answer:
-                        if reset_password_with_security_question(recover_username, security_answer, new_pass):
+                        if auth_manager.verify_security_answer(recover_username, security_answer) and auth_manager.change_password(recover_username, new_pass):
                             st.success("✅ Password reset successful! Please login with your new password.")
                             st.balloons()
                         else:
@@ -315,14 +305,14 @@ elif authentication_status == None:
                 elif len(new_password) < 6:
                     st.error("Password must be at least 6 characters")
                 else:
-                    if register_new_user(new_username, new_name, new_password, new_email):
+                    if auth_manager.register_user(new_username, new_name, new_password, new_email):
                         # Generate and display recovery code
-                        recovery_code = generate_recovery_code()
-                        add_recovery_code(new_username, recovery_code)
+                        recovery_code = auth_manager.generate_recovery_code()
+                        auth_manager.add_recovery_code(new_username, recovery_code)
                         
                         # Add security question if provided
                         if security_question and security_answer:
-                            add_security_question(new_username, security_question, security_answer)
+                            auth_manager.add_security_question(new_username, security_question, security_answer)
                         
                         st.success("✅ Registration successful!")
                         st.info(f"""

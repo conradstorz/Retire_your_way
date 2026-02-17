@@ -5,6 +5,64 @@ All notable changes to the Retirement Planning Application will be documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-02-16
+
+### 🎉 Major Release: Production-Ready with True Persistent Storage
+
+This is a major milestone that makes the application truly production-ready with reliable persistent storage for cloud deployments.
+
+### Added
+- **PostgreSQL Support** - Full support for cloud-hosted PostgreSQL databases
+- **Database Abstraction Layer** (`db_connection.py`) - Unified interface for SQLite and PostgreSQL
+- **Database-Backed Authentication** (`auth_db.py`) - Credentials now stored in database instead of YAML
+- **Automatic Environment Detection** - App automatically chooses SQLite (local) or PostgreSQL (cloud)
+- **Supabase Integration** - Easy cloud deployment with free PostgreSQL tier
+- **Migration Tool** (`migrate_to_db.py`) - Automated migration from v0.9.0 credentials.yaml to database
+- **Comprehensive Setup Guide** (`PERSISTENT_STORAGE_GUIDE.md`) - Step-by-step cloud deployment instructions
+- **Secrets Template** (`secrets.toml.template`) - Configuration template for Streamlit Cloud
+- **Multi-Platform Support** - Built-in support for Streamlit Cloud, Render, Railway, Heroku
+
+### Changed
+- **BREAKING**: User credentials moved from `credentials.yaml` to database (migration provided)
+- **Refactored**: `user_data.py` now uses database abstraction layer instead of direct SQLite
+- **Updated**: `app.py` uses new authentication system
+- **Rewritten**: `DEPLOYMENT.md` with accurate persistent storage information
+- **Updated**: Version bumped to 1.0.0 across all files
+- **Updated**: `requirements.txt` includes `psycopg2-binary` for PostgreSQL support
+
+### Fixed
+- **CRITICAL**: Data persistence on Streamlit Cloud (was completely broken in v0.9.0)
+- **CRITICAL**: Users no longer lose accounts after app restarts on cloud platforms
+- Corrected misleading documentation about Streamlit Cloud's file storage persistence
+- Improved error handling for database connection failures
+- Better fallback behavior when PostgreSQL is unavailable
+
+### Deprecated
+- `auth_config.py` - Replaced by `auth_db.py` (kept for reference only)
+- `credentials.yaml` - Replaced by database storage (migration tool provided)
+
+### Security
+- All authentication data now in database with proper encryption
+- Database credentials stored in Streamlit secrets (never in code)
+- Support for PostgreSQL Row Level Security (RLS) when used with Supabase
+
+### Documentation
+- New: `PERSISTENT_STORAGE_GUIDE.md` - Comprehensive cloud deployment guide  
+- New: `RELEASE_NOTES_v1.0.0.md` - Detailed release notes
+- Updated: `DEPLOYMENT.md` - Completely rewritten with cloud persistence options
+- Updated: `README.md` - Version 1.0.0 information
+- Updated: `CLAUDE.md` - Architecture documentation
+
+### Migration from v0.9.0
+Users upgrading from v0.9.0 should:
+1. Pull latest code: `git pull`
+2. Install dependencies: `pip install -r requirements.txt`
+3. Run migration: `python migrate_to_db.py`
+4. Test locally before cloud deployment
+5. Follow `PERSISTENT_STORAGE_GUIDE.md` for cloud setup
+
+---
+
 ## [0.9.0] - 2026-02-16
 
 ### Initial Release
