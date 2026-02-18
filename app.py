@@ -677,10 +677,226 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-config_tabs = st.tabs(["📋 Profile", "💰 Accounts", "🏠 Expenses", "📅 One-Time Events", "✅ Sanity Checks", "📈 Projections"])
+config_tabs = st.tabs(["� Getting Started", "📋 Profile", "💰 Accounts", "🏠 Expenses", "📅 One-Time Events", "✅ Sanity Checks", "📈 Projections"])
+
+# --- GETTING STARTED TAB ---
+with config_tabs[0]:
+    st.header("🚀 Welcome to Your Retirement Planning Calculator!")
+    
+    st.markdown("""
+    This tool helps you model your financial future with complete transparency. All calculations happen 
+    right here in Python—no black boxes, no hidden formulas.
+    """)
+    
+    st.divider()
+    
+    # Quick Start Section
+    with st.expander("📝 **Quick Start Guide**", expanded=True):
+        st.markdown("""
+        ### Step-by-Step Setup
+        
+        1. **👤 Profile Tab**: Set your age, retirement goals, income, and Social Security details
+        2. **💰 Accounts Tab**: Add your investment accounts (401k, IRA, brokerage, etc.)
+        3. **🏠 Expenses Tab**: List your annual expenses and mark them as CORE or FLEX
+        4. **📅 Events Tab** (Optional): Add one-time expenses like home purchases or college tuition
+        5. **📈 Projections Tab**: See your financial future year-by-year!
+        
+        💡 **Pro Tip**: Click "💾 Save All Configuration" in the Profile tab after making changes.
+        """)
+    
+    # Understanding CORE vs FLEX
+    with st.expander("💰 **Understanding Expense Types**"):
+        st.markdown("""
+        ### CORE Expenses 🔴
+        **Essential expenses that cannot be reduced:**
+        - Housing (rent/mortgage)
+        - Healthcare
+        - Food & groceries
+        - Utilities
+        - Insurance premiums
+        
+        ### FLEX Expenses 🟢
+        **Discretionary spending that can be reduced if needed:**
+        - Entertainment & hobbies
+        - Travel & vacations
+        - Dining out
+        - Subscriptions
+        - Gifts & donations
+        
+        ### How It Works
+        If your portfolio runs into a deficit, the calculator automatically reduces FLEX expenses by up to 
+        50% (configurable) to help preserve your savings. CORE expenses are never reduced.
+        
+        💡 **Strategy**: Start by marking everything CORE, then move discretionary items to FLEX. 
+        This shows you how much flexibility you have in tough times.
+        """)
+    
+    # Account Types
+    with st.expander("🏦 **Account Types & Tax Treatment**"):
+        st.markdown("""
+        ### Taxable Brokerage
+        - No contribution limits
+        - No early withdrawal penalties
+        - Capital gains taxes on withdrawals
+        - Most flexible
+        
+        ### Traditional IRA / 401(k)
+        - Tax-deferred growth
+        - Required Minimum Distributions (RMDs) start at age 73-75 (based on birth year)
+        - Withdrawals taxed as ordinary income
+        - Early withdrawal penalties before age 59½
+        
+        ### Roth IRA / Roth 401(k)
+        - Tax-free growth and withdrawals
+        - No RMDs during owner's lifetime
+        - Contributions already taxed
+        - Best for long-term growth
+        
+        ### HSA (Health Savings Account)
+        - Triple tax advantage (if used for medical)
+        - Can invest and grow tax-free
+        - Becomes like Traditional IRA after 65
+        
+        ### 💡 Withdrawal Order Strategy
+        
+        **How Priority Works:**
+        
+        When you need to withdraw money in retirement, the calculator pulls from accounts in **priority order**:
+        - **Priority 1** = withdrawn from FIRST
+        - **Priority 2** = withdrawn from SECOND (only after Priority 1 is empty)
+        - **Priority 3+** = withdrawn from LAST
+        
+        You set these priorities in the **Accounts tab** for each account.
+        
+        **Why Order Matters:**
+        
+        Withdrawal order affects your tax bill and how long your money lasts:
+        
+        1. **Taxable Brokerage (Priority 1)** - Withdraw first because:
+           - Lower tax rates (capital gains vs ordinary income)
+           - No RMDs forcing withdrawals later
+           - Most flexible - no age restrictions or penalties
+        
+        2. **Traditional IRA/401(k) (Priority 2)** - Withdraw second because:
+           - Taxed as ordinary income (higher rates)
+           - RMDs will force you to withdraw later anyway
+           - Let Roth accounts grow tax-free as long as possible
+        
+        3. **Roth IRA (Priority 3)** - Withdraw last because:
+           - Tax-free withdrawals - save this advantage!
+           - No RMDs - can pass to heirs
+           - Maximum long-term growth potential
+        
+        **Alternative Strategies:**
+        
+        - **Tax Bracket Management**: Some withdraw from Traditional and Roth strategically to stay in lower brackets
+        - **Roth Conversion Ladder**: Withdraw taxable first, convert Traditional to Roth gradually
+        - **Healthcare Subsidies**: Keep income low in early retirement to qualify for ACA subsidies
+        
+        **Example Setup:**
+        
+        If you have these accounts:
+        - Brokerage: $200k → Set Priority = **1**
+        - Traditional IRA: $500k → Set Priority = **2**  
+        - Roth IRA: $150k → Set Priority = **3**
+        
+        In a deficit year, the calculator withdraws from Brokerage first, then Traditional IRA, then Roth IRA.
+        
+        💡 **Pro Tip**: This is customizable! Experiment with different strategies by changing priorities in the Accounts tab.
+        """)
+    
+    # Understanding Projections
+    with st.expander("📊 **Understanding Your Projections**"):
+        st.markdown("""
+        ### Year-by-Year Simulation
+        
+        The calculator simulates each year of your life from current age to target age:
+        
+        1. **Income**: Work income (until retirement) + Social Security (when it starts)
+        2. **Expenses**: Core + Flex expenses, adjusted for inflation
+        3. **Surplus/Deficit**: Income minus expenses
+        4. **Contributions**: If surplus, money is invested according to account contribution shares
+        5. **Withdrawals**: If deficit, money is withdrawn from accounts in priority order
+        6. **Returns**: Investment returns applied to remaining account balances
+        7. **FLEX Reduction**: If portfolio can't cover expenses, FLEX spending is reduced automatically
+        
+        ### Key Metrics
+        
+        - **Portfolio Run-Out Age**: When your money runs out (if at all)
+        - **Cushion Years**: How many years past your target age you can sustain
+        - **Status**: SAFE 🟢 / AT RISK 🟡 / CRITICAL 🔴
+        
+        ### Charts
+        
+        - **Portfolio Over Time**: See your total wealth trajectory
+        - **Income vs Expenses**: Understand cash flow throughout retirement
+        - **Year-by-Year Table**: Detailed breakdown of every year
+        """)
+    
+    # Data Management
+    with st.expander("💾 **Data Import/Export**"):
+        st.markdown("""
+        ### Export Your Data
+        
+        Click **💾 Export Data** in the top header to download all your configuration as JSON:
+        - Profile settings
+        - All accounts
+        - All expenses
+        - All events
+        - Account snapshots (historical tracking)
+        
+        ### Import Data
+        
+        Click **📥 Import Data** to restore from a backup:
+        1. Upload your JSON backup file
+        2. Review what will be imported
+        3. Confirm to restore your data
+        
+        ⚠️ **Import Warning**: This replaces your current configuration!
+        
+        ### Why Use This?
+        - **Backup**: Keep copies of your financial plan
+        - **Migration**: Move data between environments
+        - **Experimentation**: Try different scenarios without losing your main plan
+        - **Sharing**: Share your plan structure (remove personal numbers first!)
+        
+        The import validator checks for errors and lets you import partial data if some sections are damaged.
+        """)
+    
+    # Tips and Best Practices
+    with st.expander("💡 **Tips & Best Practices**"):
+        st.markdown("""
+        ### Getting Accurate Results
+        
+        1. **Be Conservative**: Underestimate returns (6-7% vs 10%), overestimate expenses
+        2. **Include Everything**: Don't forget insurance, property taxes, car replacement, etc.
+        3. **Update Annually**: Refresh your plan with actual numbers each year
+        4. **Use Snapshots**: Track your account growth over time in the Accounts tab
+        5. **Test Scenarios**: Export your data, then try different retirement ages or spending levels
+        
+        ### Common Questions
+        
+        **Q: How accurate are the projections?**  
+        A: The math is exact, but the future isn't. Use conservative assumptions and update regularly.
+        
+        **Q: Should I include my home equity?**  
+        A: Only if you plan to downsize or reverse mortgage. Don't count your primary residence as liquid.
+        
+        **Q: What return rate should I use?**  
+        A: Historical S&P 500 average is ~10%, but 6-7% is more conservative for retirement planning.
+        
+        **Q: What about taxes?**  
+        A: This calculator doesn't model taxes in detail. Budget ~20-25% of Traditional IRA/401k withdrawals for taxes.
+        
+        **Q: What about healthcare costs?**  
+        A: Add Medicare premiums (~$2,000-3,000/year) and supplement/Medigap costs to your CORE expenses.
+        """)
+    
+    st.divider()
+    st.success("✅ Ready to get started? Head to the **Profile** tab to set up your information!")
 
 # --- PROFILE TAB ---
-with config_tabs[0]:
+with config_tabs[1]:
     header_col1, header_col2 = st.columns([3, 1])
     with header_col1:
         st.subheader("Personal Profile")
@@ -796,7 +1012,7 @@ with config_tabs[0]:
 
 
 # --- ACCOUNTS TAB ---
-with config_tabs[1]:
+with config_tabs[2]:
     header_col1, header_col2 = st.columns([3, 1])
     with header_col1:
         st.subheader("Investment Accounts")
@@ -1043,7 +1259,7 @@ with config_tabs[1]:
 
 
 # --- EXPENSES TAB ---
-with config_tabs[2]:
+with config_tabs[3]:
     header_col1, header_col2 = st.columns([3, 1])
     with header_col1:
         st.subheader("Expense Categories")
@@ -1130,8 +1346,8 @@ with config_tabs[2]:
     
 
 
-# --- EVENTS TAB ---
-with config_tabs[3]:
+# --- ONE-TIME EVENTS TAB ---
+with config_tabs[4]:
     header_col1, header_col2 = st.columns([3, 1])
     with header_col1:
         st.subheader("One-Time Financial Events")
@@ -1442,9 +1658,8 @@ with dashboard_container:
             unsafe_allow_html=True
         )
 
-# --- PROJECTIONS TAB ---
 # --- SANITY CHECKS TAB ---
-with config_tabs[4]:
+with config_tabs[5]:
     st.subheader("Current Year Sanity Checks")
     st.markdown("""
     Quick reality check on your numbers **as of today** (age {}).
@@ -1610,7 +1825,7 @@ with config_tabs[4]:
                      help="Current portfolio ÷ annual expenses (ignoring investment returns)")
 
 # --- PROJECTIONS TAB ---
-with config_tabs[5]:
+with config_tabs[6]:
     st.subheader("Financial Overview")
 
     # Summary stats
