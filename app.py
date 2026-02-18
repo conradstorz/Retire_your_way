@@ -783,7 +783,7 @@ with config_tabs[0]:
         3. **Contributions**: Planned amounts added to each account
         4. **Surplus/Deficit**: Income minus (expenses + contributions)
         5. **Withdrawals**: If deficit, money is withdrawn from accounts in priority order
-        6. **Returns**: Investment returns applied to all account balances
+        6. **Returns**: Your money makes money! 💰 Investments grow automatically (compound magic!)
         7. **FLEX Reduction**: If portfolio can't cover expenses, FLEX spending is reduced automatically
         
         ### Key Metrics
