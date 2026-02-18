@@ -676,15 +676,17 @@ def analyze_retirement_plan(
 
     # Check for contribution shortfalls (only warn if it happens while still working)
     if 'contribution_shortfall' in projection_df.columns:
+        # Filter to significant shortfalls only (> $100/year to avoid noise from rounding)
         shortfall_years = projection_df[
-            projection_df['contribution_shortfall'] > 0
+            projection_df['contribution_shortfall'] > 100
         ]
         if len(shortfall_years) > 0:
             first_shortfall_age = int(shortfall_years.iloc[0]['age'])
             first_shortfall_year = int(shortfall_years.iloc[0]['year'])
-            first_year_shortfall = shortfall_years.iloc[0]['contribution_shortfall']
-            monthly_shortfall = first_year_shortfall / 12
             total_shortfall = shortfall_years['contribution_shortfall'].sum()
+            # Calculate average monthly shortfall across all affected years
+            avg_annual_shortfall = total_shortfall / len(shortfall_years)
+            monthly_shortfall = avg_annual_shortfall / 12
             
             # Check if still working when shortfall starts
             still_working = shortfall_years.iloc[0]['work_income'] > 0
@@ -694,17 +696,24 @@ def analyze_retirement_plan(
                 warnings.append(
                     f'Income insufficient to fund planned account contributions '
                     f'starting in {first_shortfall_year} (age {first_shortfall_age}). '
-                    f'Monthly shortfall: ${monthly_shortfall:,.0f}/month '
+                    f'Average monthly shortfall: ${monthly_shortfall:,.0f}/month '
                     f'(${total_shortfall:,.0f} total over {len(shortfall_years)} years). '
                     f'Consider increasing income or reducing planned contributions.'
                 )
             # Note: Post-retirement contribution shortfalls are not warned about.
             # In retirement, the focus should be on sustainable withdrawals, not contributions.
 
-    # Check for early withdrawals
+    # Check for early withdrawals (only warn if significant, > $1000/year threshold)
     working_years = projection_df[projection_df['work_income'] > 0]
-    if len(working_years) > 0 and working_years['total_withdrawals'].sum() > 0:
-        warnings.append('Withdrawing from portfolio while still working')
+    if len(working_years) > 0:
+        total_working_withdrawals = working_years['total_withdrawals'].sum()
+        # Only warn if withdrawals are significant (avoid noise from rounding/timing)
+        if total_working_withdrawals > 1000:
+            warnings.append(
+                f'Withdrawing ${total_working_withdrawals:,.0f} from portfolio '
+                f'over {len(working_years)} working years. Consider increasing income '
+                f'or reducing expenses/contributions.'
+            )
 
     # Calculate conservative sustainable withdrawal rate for retirement
     sustainable_withdrawal_annual = None

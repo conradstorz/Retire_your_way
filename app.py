@@ -650,7 +650,10 @@ dashboard_container = st.container()
 
 st.header("⚙️ Configuration")
 
-# Make configuration tab labels larger for readability
+# Mobile-friendly hint for tab navigation
+st.info("📱 **Mobile users**: Swipe left/right on the tabs below to see all 7 sections: Getting Started • Profile • Accounts • Expenses • Events • Sanity Checks • Projections")
+
+# Make configuration tab labels larger for readability and improve mobile scrolling
 st.markdown("""
 <style>
     button[data-baseweb="tab"] {
@@ -673,6 +676,45 @@ st.markdown("""
     }
     .stTabs [data-baseweb="tab-list"] button p {
         font-size: 1.5rem !important;
+    }
+    
+    /* Mobile tab scrolling improvements */
+    .stTabs [data-baseweb="tab-list"] {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        scrollbar-width: thin;
+        scrollbar-color: #888 #f1f1f1;
+    }
+    
+    /* Show scrollbar on mobile */
+    @media (max-width: 768px) {
+        .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar {
+            height: 8px;
+            display: block !important;
+        }
+        .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        
+        /* Add scroll shadow indicator */
+        .stTabs [data-baseweb="tab-list"] {
+            background: 
+                linear-gradient(90deg, white 30%, rgba(255,255,255,0)),
+                linear-gradient(90deg, rgba(255,255,255,0), white 70%) 100% 0,
+                radial-gradient(farthest-side at 0% 50%, rgba(0,0,0,.2), rgba(0,0,0,0)),
+                radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,.2), rgba(0,0,0,0)) 100% 0;
+            background-repeat: no-repeat;
+            background-size: 40px 100%, 40px 100%, 14px 100%, 14px 100%;
+            background-attachment: local, local, scroll, scroll;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
