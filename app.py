@@ -768,40 +768,6 @@ with config_tabs[0]:
         
         You set these priorities in the **Accounts tab** for each account.
         
-        **Why Order Matters:**
-        
-        Withdrawal order affects your tax bill and how long your money lasts:
-        
-        1. **Taxable Brokerage (Priority 1)** - Withdraw first because:
-           - Lower tax rates (capital gains vs ordinary income)
-           - No RMDs forcing withdrawals later
-           - Most flexible - no age restrictions or penalties
-        
-        2. **Traditional IRA/401(k) (Priority 2)** - Withdraw second because:
-           - Taxed as ordinary income (higher rates)
-           - RMDs will force you to withdraw later anyway
-           - Let Roth accounts grow tax-free as long as possible
-        
-        3. **Roth IRA (Priority 3)** - Withdraw last because:
-           - Tax-free withdrawals - save this advantage!
-           - No RMDs - can pass to heirs
-           - Maximum long-term growth potential
-        
-        **Alternative Strategies:**
-        
-        - **Tax Bracket Management**: Some withdraw from Traditional and Roth strategically to stay in lower brackets
-        - **Roth Conversion Ladder**: Withdraw taxable first, convert Traditional to Roth gradually
-        - **Healthcare Subsidies**: Keep income low in early retirement to qualify for ACA subsidies
-        
-        **Example Setup:**
-        
-        If you have these accounts:
-        - Brokerage: $200k → Set Priority = **1**
-        - Traditional IRA: $500k → Set Priority = **2**  
-        - Roth IRA: $150k → Set Priority = **3**
-        
-        In a deficit year, the calculator withdraws from Brokerage first, then Traditional IRA, then Roth IRA.
-        
         💡 **Pro Tip**: This is customizable! Experiment with different strategies by changing priorities in the Accounts tab.
         """)
     
@@ -814,10 +780,10 @@ with config_tabs[0]:
         
         1. **Income**: Work income (until retirement) + Social Security (when it starts)
         2. **Expenses**: Core + Flex expenses, adjusted for inflation
-        3. **Surplus/Deficit**: Income minus expenses
-        4. **Contributions**: If surplus, money is invested according to account contribution shares
+        3. **Contributions**: Planned amounts added to each account
+        4. **Surplus/Deficit**: Income minus (expenses + contributions)
         5. **Withdrawals**: If deficit, money is withdrawn from accounts in priority order
-        6. **Returns**: Investment returns applied to remaining account balances
+        6. **Returns**: Investment returns applied to all account balances
         7. **FLEX Reduction**: If portfolio can't cover expenses, FLEX spending is reduced automatically
         
         ### Key Metrics

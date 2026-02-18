@@ -26,7 +26,7 @@ There is no test suite or linter configured.
 Four-file Python application with clear separation of concerns:
 
 - **`app.py`** — Streamlit UI. Handles authentication flow, sidebar configuration, tabbed account/expense/event editors, projection triggering, and Plotly chart rendering. Uses `st.session_state` for dynamic UI lists.
-- **`calculations.py`** — Financial engine. Core function `run_comprehensive_projection()` runs a year-by-year simulation: work income → Social Security → expense inflation → one-time events → flex spending adjustment → surplus reinvestment or deficit withdrawal → investment returns. `analyze_retirement_plan()` produces summary metrics (run-out age, cushion years, status, warnings). Uses Python `@dataclass` for `AccountBucket`, `ExpenseCategory`, and `OneTimeEvent`.
+- **`calculations.py`** — Financial engine. Core function `run_comprehensive_projection()` runs a year-by-year simulation: work income → Social Security → expense inflation → one-time events → planned contributions → flex spending adjustment → deficit withdrawal → investment returns. `analyze_retirement_plan()` produces summary metrics (run-out age, cushion years, status, warnings). Uses Python `@dataclass` for `AccountBucket`, `ExpenseCategory`, and `OneTimeEvent`.
 - **`auth_config.py`** — Authentication layer. Manages `credentials.yaml` with bcrypt-hashed passwords via `streamlit-authenticator`. Supports registration, password recovery via recovery codes (SHA-256 hashed) or security questions.
 - **`user_data.py`** — SQLite persistence. `UserDataManager` class handles CRUD for four tables: `user_profiles`, `user_accounts`, `user_expenses`, `user_events`. Per-user data isolation by username. Creates default data for new users.
 
@@ -45,9 +45,9 @@ The projection engine processes each year in sequence:
 - Work income applies growth rate, stops at `work_end_age`
 - Social Security starts at `ss_start_age` with COLA adjustments
 - Expenses inflate annually; FLEX categories can be reduced up to `max_flex_reduction` (default 50%) during deficits
-- Surplus reinvests into accounts by `contrib_share` proportions
+- Planned contributions added to accounts (fixed dollar amounts per account)
 - Deficits withdraw from accounts in `priority` order
-- Investment returns applied to remaining balances
+- Investment returns applied to all account balances
 
 ## Expense Types
 
