@@ -406,12 +406,12 @@ with data_col:
         file_name=st.session_state.export_filename,
         mime="application/json",
         help="Export all your configuration data",
-        use_container_width=True,
+        width="stretch",
         key="export_data_button"
     )
     
     # Import data button
-    if st.button("📥 Import Data", use_container_width=True, help="Restore from backup file"):
+    if st.button("📥 Import Data", width="stretch", help="Restore from backup file"):
         st.session_state.show_import = True
 
 with logout_col:
@@ -2123,7 +2123,7 @@ with config_tabs[6]:
 
     st.dataframe(
         display_df,
-        use_container_width=True,
+        width="stretch",
         height=600,
         hide_index=True
     )
