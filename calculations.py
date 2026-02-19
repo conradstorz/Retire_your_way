@@ -283,7 +283,7 @@ def run_comprehensive_projection(
 
         flex_expenses_actual = flex_expenses_full
         flex_multiplier = 1.0
-        total_contributions = 0
+        investment_contributions = 0
         contributions = {}
         contribution_shortfall = 0
 
@@ -292,7 +292,7 @@ def run_comprehensive_projection(
             flex_expenses_actual = flex_expenses_full
             flex_multiplier = 1.0
             contributions = dict(planned)
-            total_contributions = total_planned
+            investment_contributions = total_planned
 
         elif available_for_all >= total_planned:
             # Enough for contributions but not full flex spending.
@@ -308,7 +308,7 @@ def run_comprehensive_projection(
             if money_for_flex >= flex_expenses_full * (1 - max_flex_reduction):
                 # Flex reduction was enough to fund all contributions
                 contributions = dict(planned)
-                total_contributions = total_planned
+                investment_contributions = total_planned
             else:
                 # Even max flex reduction wasn't enough; fund what we can
                 money_after_min_flex = (available_for_all
@@ -321,8 +321,8 @@ def run_comprehensive_projection(
                     for acc_name, amt in planned.items():
                         share = amt / total_planned
                         contributions[acc_name] = money_after_min_flex * share
-                    total_contributions = money_after_min_flex
-                    contribution_shortfall = total_planned - total_contributions
+                    investment_contributions = money_after_min_flex
+                    contribution_shortfall = total_planned - investment_contributions
                 else:
                     contributions = {name: 0 for name in planned}
 
@@ -340,8 +340,8 @@ def run_comprehensive_projection(
                 for acc_name, amt in planned.items():
                     share = amt / total_planned
                     contributions[acc_name] = money_after_min_flex * share
-                total_contributions = money_after_min_flex
-                contribution_shortfall = total_planned - total_contributions
+                investment_contributions = money_after_min_flex
+                contribution_shortfall = total_planned - investment_contributions
             else:
                 # No money for contributions at all
                 contributions = {name: 0 for name in planned}
@@ -389,7 +389,7 @@ def run_comprehensive_projection(
                         
                         # Add to this account's contribution
                         contributions[acc_name] = contributions.get(acc_name, 0) + withdrawal_amount
-                        total_contributions += withdrawal_amount
+                        investment_contributions += withdrawal_amount
                         this_account_shortfall -= withdrawal_amount
                         remaining_shortfall -= withdrawal_amount
             
@@ -425,7 +425,7 @@ def run_comprehensive_projection(
         # --- TOTAL EXPENSES (for surplus/deficit calculation) ---
 
         total_expenses_actual = (core_expenses + flex_expenses_actual
-                                 + total_contributions)
+                                 + investment_contributions)
         
         # RMDs add to available cash (they're forced withdrawals that can cover expenses)
         surplus_deficit = total_income + total_rmds - total_expenses_actual
@@ -494,7 +494,7 @@ def run_comprehensive_projection(
             'age': age,
             'work_income': work_income,
             'ss_income': ss_income,
-            'total_income': total_income,
+            'total_income': total_income + total_investment_returns,  # Include investment returns in displayed total
             'core_expenses': core_expenses,
             'flex_expenses_full': flex_expenses_full,
             'flex_multiplier': flex_multiplier,
@@ -504,7 +504,7 @@ def run_comprehensive_projection(
             'event_account': event_account,
             'total_expenses': total_expenses_actual,
             'surplus_deficit': surplus_deficit,
-            'total_contributions': total_contributions,
+            'investment_contributions': investment_contributions,
             'contribution_shortfall': contribution_shortfall,
             'total_rmds': total_rmds,
             'total_withdrawals': total_withdrawals,

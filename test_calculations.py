@@ -165,7 +165,9 @@ class TestSocialSecurity:
         # Age 67: work + SS
         assert result.iloc[0]['work_income'] > 0, "Should have work income at 67"
         assert result.iloc[0]['ss_income'] > 0, "Should have SS income at 67"
-        assert abs(result.iloc[0]['total_income'] - (result.iloc[0]['work_income'] + result.iloc[0]['ss_income'])) < 1
+        # total_income now includes investment returns
+        expected_total = result.iloc[0]['work_income'] + result.iloc[0]['ss_income'] + result.iloc[0]['total_investment_returns']
+        assert abs(result.iloc[0]['total_income'] - expected_total) < 1
         
         # Age 68: work + SS
         assert result.iloc[1]['work_income'] > 0, "Should have work income at 68"
@@ -178,7 +180,9 @@ class TestSocialSecurity:
         # Age 70: only SS (work stopped)
         assert result.iloc[3]['work_income'] == 0, "Work income should stop at 70"
         assert result.iloc[3]['ss_income'] > 0, "Should still have SS income at 70"
-        assert abs(result.iloc[3]['total_income'] - result.iloc[3]['ss_income']) < 1
+        # total_income now includes investment returns
+        expected_total = result.iloc[3]['ss_income'] + result.iloc[3]['total_investment_returns']
+        assert abs(result.iloc[3]['total_income'] - expected_total) < 1
 
 
 class TestExpenseInflation:
@@ -414,7 +418,7 @@ class TestAccountContributions:
         # Surplus: $30,000 - plenty to cover everything
         # No withdrawals should occur
         
-        assert result.iloc[0]['total_contributions'] == 10000
+        assert result.iloc[0]['investment_contributions'] == 10000
         assert result.iloc[0]['total_withdrawals'] == 0
         assert result.iloc[0]['flex_multiplier'] == 1.0
     
@@ -444,7 +448,7 @@ class TestAccountContributions:
         # Can spend: $20,000 - $10,000 = $10,000 on FLEX
         # FLEX multiplier should be 0.5 (50% of planned)
         
-        assert abs(result.iloc[0]['total_contributions'] - 10000) < 1
+        assert abs(result.iloc[0]['investment_contributions'] - 10000) < 1
         assert abs(result.iloc[0]['flex_multiplier'] - 0.5) < 0.01
         assert result.iloc[0]['total_withdrawals'] == 0  # No portfolio withdrawals
 
