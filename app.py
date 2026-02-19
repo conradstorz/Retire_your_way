@@ -2070,7 +2070,7 @@ with config_tabs[6]:
 
     display_cols = [
         'year', 'age', 'work_income', 'ss_income', 'total_income',
-        'core_expenses', 'flex_expenses_actual', 'total_expenses',
+        'total_expenses',
         'surplus_deficit', 'investment_contributions', 'total_withdrawals',
         'total_investment_returns', 'total_portfolio'
     ]
@@ -2083,8 +2083,8 @@ with config_tabs[6]:
         'surplus_deficit': 'Surplus or Deficit'
     })
 
-    currency_cols = ['work_income', 'ss_income', 'total_income', 'core_expenses',
-                     'flex_expenses_actual', 'total_expenses', 'Surplus or Deficit',
+    currency_cols = ['work_income', 'ss_income', 'total_income',
+                     'total_expenses', 'Surplus or Deficit',
                      'investment_contributions', 'total_withdrawals', 'FREE Money from Investments',
                      'total_portfolio']
 
