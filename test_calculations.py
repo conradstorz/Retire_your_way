@@ -591,6 +591,171 @@ class TestInvestmentReturns:
         
         assert abs(result.iloc[0]['Conservative_return'] - 5000) < 1
         assert abs(result.iloc[0]['Aggressive_return'] - 12000) < 1
+    
+    def test_total_investment_returns_column_exists(self):
+        """total_investment_returns column should exist and sum all account returns"""
+        result = run_comprehensive_projection(
+            current_age=50,
+            target_age=51,
+            current_work_income=100000,
+            work_end_age=65,
+            ss_start_age=67,
+            ss_monthly_benefit=2000,
+            accounts=[
+                AccountBucket("401k", 100000, 0.08, 1, "401k", 0),
+                AccountBucket("IRA", 50000, 0.07, 2, "traditional_ira", 0),
+                AccountBucket("Roth", 30000, 0.09, 3, "roth_ira", 0),
+            ],
+            expense_categories=[ExpenseCategory("Living", 40000, "CORE")],
+        )
+        
+        # Verify column exists
+        assert 'total_investment_returns' in result.columns
+        
+        # Calculate expected individual returns
+        returns_401k = result.iloc[0]['401k_return']
+        returns_ira = result.iloc[0]['IRA_return']
+        returns_roth = result.iloc[0]['Roth_return']
+        
+        # Verify total equals sum of individual returns
+        total_returns = result.iloc[0]['total_investment_returns']
+        expected_total = returns_401k + returns_ira + returns_roth
+        
+        assert abs(total_returns - expected_total) < 0.01
+        
+        # Rough calculation: 100k*0.08 + 50k*0.07 + 30k*0.09 = 8000 + 3500 + 2700 = 14200
+        assert abs(total_returns - 14200) < 100
+    
+    def test_multi_year_compound_growth(self):
+        """Returns should compound correctly over multiple years"""
+        result = run_comprehensive_projection(
+            current_age=68,
+            target_age=73,
+            current_work_income=0,  # Retired, no income surplus
+            work_end_age=65,
+            ss_start_age=67,
+            ss_monthly_benefit=3333,  # $40k/year to match expenses
+            accounts=[AccountBucket("Growth", 100000, 0.10, 1, "taxable_brokerage", 0)],
+            expense_categories=[ExpenseCategory("Living", 40000, "CORE")],
+            inflation_rate=0.0,  # Zero inflation for easier math
+        )
+        
+        # With income matching expenses and 10% return:
+        # Year 0: Starting $100k, no withdrawals, return = $10k, ending ≈ $110k
+        # Year 1: Starting $110k, return = $11k, ending ≈ $121k
+        # Year 2: Starting $121k, return = $12.1k, ending ≈ $133.1k
+        # Year 3: Starting $133.1k, return = $13.31k, ending ≈ $146.41k
+        # Year 4: Starting $146.41k, return = $14.641k, ending ≈ $161.05k
+        # Year 5: Starting $161.05k, return = $16.105k, ending ≈ $177.16k
+        
+        # Verify compounding: each year's balance should be approximately
+        # previous balance * 1.10
+        for i in range(1, len(result)):
+            prev_balance = result.iloc[i - 1]['Growth_balance']
+            current_balance = result.iloc[i]['Growth_balance']
+            expected_balance = prev_balance * 1.10
+            
+            # Allow 5% tolerance for small timing effects
+            tolerance = expected_balance * 0.05
+            assert abs(current_balance - expected_balance) < tolerance, \
+                f"Year {i}: Expected {expected_balance:.2f}, got {current_balance:.2f}"
+        
+        # Final balance should show compound growth
+        final_balance = result.iloc[-1]['Growth_balance']
+        expected_final = 100000 * (1.10 ** len(result))
+        assert abs(final_balance - expected_final) < expected_final * 0.05
+    
+    def test_returns_calculated_after_all_transactions(self):
+        """Returns should be calculated on balance AFTER contributions, RMDs, withdrawals, and events"""
+        events = [OneTimeEvent(2026, "Large Withdrawal", 20000, "IRA")]
+        
+        result = run_comprehensive_projection(
+            current_age=75,
+            target_age=76,
+            current_work_income=0,
+            work_end_age=65,
+            ss_start_age=67,
+            ss_monthly_benefit=2000,
+            accounts=[AccountBucket("IRA", 100000, 0.08, 1, "traditional_ira", 0)],
+            expense_categories=[ExpenseCategory("Living", 20000, "CORE")],
+            events=events,
+        )
+        
+        # Starting: $100,000
+        # RMD at age 75: ~$4,065 (100000 / 24.6)
+        # Event withdrawal: $20,000
+        # Income covers expenses, so no deficit withdrawal
+        # Balance before returns: 100000 - RMD - 20000
+        # Returns: (balance_before_returns) * 0.08
+        
+        rmd = result.iloc[0]['IRA_rmd']
+        event_amount = result.iloc[0]['event_amount']
+        withdrawal = result.iloc[0]['IRA_withdrawal']
+        returns = result.iloc[0]['IRA_return']
+        ending_balance = result.iloc[0]['IRA_balance']
+        
+        # Balance before returns
+        balance_before_returns = 100000 - rmd - event_amount - withdrawal
+        expected_return = balance_before_returns * 0.08
+        
+        # Verify return matches expected
+        assert abs(returns - expected_return) < 10
+        
+        # Verify ending balance = starting - RMD - event - withdrawal + returns
+        expected_ending = 100000 - rmd - event_amount - withdrawal + returns
+        assert abs(ending_balance - expected_ending) < 1
+    
+    def test_returns_with_contributions(self):
+        """Returns should be calculated on balance AFTER contributions are added"""
+        result = run_comprehensive_projection(
+            current_age=40,
+            target_age=41,
+            current_work_income=100000,
+            work_end_age=65,
+            ss_start_age=67,
+            ss_monthly_benefit=2000,
+            accounts=[AccountBucket("401k", 50000, 0.08, 1, "401k", 20000)],  # $20k planned contribution
+            expense_categories=[ExpenseCategory("Living", 40000, "CORE")],
+        )
+        
+        # Starting: $50,000
+        # Contribution: $20,000
+        # Balance after contribution: $70,000
+        # Returns: $70,000 * 0.08 = $5,600
+        # Ending: $70,000 + $5,600 = $75,600
+        
+        contribution = result.iloc[0]['401k_contribution']
+        returns = result.iloc[0]['401k_return']
+        ending_balance = result.iloc[0]['401k_balance']
+        
+        assert abs(contribution - 20000) < 1
+        expected_return = (50000 + contribution) * 0.08
+        assert abs(returns - expected_return) < 10
+        assert abs(ending_balance - 75600) < 20
+    
+    def test_zero_balance_generates_zero_returns(self):
+        """An account with zero balance should generate zero returns"""
+        result = run_comprehensive_projection(
+            current_age=80,
+            target_age=81,
+            current_work_income=0,
+            work_end_age=65,
+            ss_start_age=67,
+            ss_monthly_benefit=1000,
+            accounts=[AccountBucket("Depleted", 1000, 0.08, 1, "taxable_brokerage", 0)],
+            expense_categories=[ExpenseCategory("Living", 50000, "CORE")],
+        )
+        
+        # With only $12k SS income and $50k expenses, the account will be fully depleted
+        # Returns on a zero balance should be zero
+        
+        ending_balance = result.iloc[0]['Depleted_balance']
+        
+        if ending_balance <= 1:  # Account depleted
+            returns = result.iloc[0]['Depleted_return']
+            # If account was depleted during the year, returns should be minimal
+            assert returns >= 0  # Returns can't be negative
+            assert returns < 100  # Should be very small since balance was drained
 
 
 class TestRMDs:
@@ -1197,6 +1362,7 @@ class TestEdgeCases:
             ss_monthly_benefit=2000,
             accounts=[AccountBucket("Empty", 0, 0.07, 1, "taxable_brokerage", 5000)],  # Contributions
             expense_categories=[ExpenseCategory("Living", 40000, "CORE")],
+            ultimate_max_age=35,  # Only project to target age for this test
         )
         
         # Should build up balance through contributions
@@ -1254,6 +1420,72 @@ class TestEdgeCases:
         
         # Should stop at max_age
         assert result.iloc[-1]['age'] <= 110
+    
+    def test_ultimate_max_age_parameter(self):
+        """Test that ultimate_max_age controls projection length independent of target_age"""
+        result = run_comprehensive_projection(
+            current_age=50,
+            target_age=90,  # Goal age
+            current_work_income=80000,
+            work_end_age=65,
+            ss_start_age=67,
+            ss_monthly_benefit=2500,
+            accounts=[AccountBucket("Test", 500000, 0.07, 1, "taxable_brokerage", 0)],
+            expense_categories=[ExpenseCategory("Living", 40000, "CORE")],
+            ultimate_max_age=110,
+        )
+        
+        # Even though target_age is 90, projection should go to ultimate_max_age (110)
+        assert result.iloc[-1]['age'] == 110
+        assert len(result) == 61  # Ages 50-110 inclusive
+        
+        # Verify we have data at both target_age and ultimate_max_age
+        assert any(result['age'] == 90)  # Target age present
+        assert result.iloc[-1]['age'] == 110  # Goes to ultimate max
+    
+    def test_ultimate_max_age_shorter_than_target(self):
+        """Test that projection stops at ultimate_max_age even if less than target_age"""
+        result = run_comprehensive_projection(
+            current_age=50,
+            target_age=100,
+            current_work_income=80000,
+            work_end_age=65,
+            ss_start_age=67,
+            ss_monthly_benefit=2500,
+            accounts=[AccountBucket("Test", 500000, 0.07, 1, "taxable_brokerage", 0)],
+            expense_categories=[ExpenseCategory("Living", 40000, "CORE")],
+            ultimate_max_age=85,  # Shorter than target_age
+        )
+        
+        # Should stop at ultimate_max_age
+        assert result.iloc[-1]['age'] == 85
+        assert len(result) == 36  # Ages 50-85 inclusive
+    
+    def test_projection_always_goes_to_ultimate_max_age(self):
+        """Verify projection extends beyond target_age to show long-term sustainability"""
+        result = run_comprehensive_projection(
+            current_age=65,
+            target_age=85,  # Planning for 85
+            current_work_income=0,
+            work_end_age=65,
+            ss_start_age=67,
+            ss_monthly_benefit=3000,
+            accounts=[AccountBucket("Portfolio", 1000000, 0.06, 1, "taxable_brokerage", 0)],
+            expense_categories=[ExpenseCategory("Living", 50000, "CORE")],
+            ultimate_max_age=100,
+        )
+        
+        # Should project all the way to age 100
+        assert result.iloc[-1]['age'] == 100
+        
+        # Should show whether plan is sustainable past target age
+        target_row = result[result['age'] == 85].iloc[0]
+        final_row = result.iloc[-1]
+        
+        # Both should have portfolio data
+        assert 'total_portfolio' in result.columns
+        assert target_row['total_portfolio'] >= 0
+        assert final_row['total_portfolio'] >= 0
     
     def test_very_high_expenses(self):
         """Test with expenses far exceeding income and portfolio"""

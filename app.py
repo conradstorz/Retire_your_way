@@ -945,6 +945,13 @@ with config_tabs[1]:
             value=int(user_profile['target_age']),
             help="Age you want to ensure money lasts until"
         )
+        ultimate_max_age = st.number_input(
+            "Ultimate Max Lifetime",
+            min_value=target_age,
+            max_value=120,
+            value=int(user_profile.get('ultimate_max_age', 110)),
+            help="Maximum age to project (shows what happens beyond target age)"
+        )
         work_end_age = st.number_input(
             "Work End Age",
             min_value=current_age,
@@ -1017,6 +1024,7 @@ with config_tabs[1]:
         profile_data = {
             'current_age': current_age,
             'target_age': target_age,
+            'ultimate_max_age': ultimate_max_age,
             'work_end_age': work_end_age,
             'current_work_income': current_work_income,
             'work_income_growth': 0,
@@ -1596,7 +1604,7 @@ projection = run_comprehensive_projection(
     max_flex_reduction=max_flex_reduction,
     events=events_list,
     inflation_rate=inflation_rate,
-    max_age=110
+    ultimate_max_age=ultimate_max_age
 )
 
 analysis = analyze_retirement_plan(
@@ -2049,14 +2057,20 @@ with config_tabs[6]:
         'year', 'age', 'work_income', 'ss_income', 'total_income',
         'core_expenses', 'flex_expenses_actual', 'total_expenses',
         'surplus_deficit', 'total_contributions', 'total_withdrawals',
-        'total_portfolio'
+        'total_investment_returns', 'total_portfolio'
     ]
 
     display_df = projection[display_cols].copy()
 
+    # Rename columns for better readability
+    display_df = display_df.rename(columns={
+        'total_investment_returns': 'FREE Money from Investments'
+    })
+
     currency_cols = ['work_income', 'ss_income', 'total_income', 'core_expenses',
                      'flex_expenses_actual', 'total_expenses', 'surplus_deficit',
-                     'total_contributions', 'total_withdrawals', 'total_portfolio']
+                     'total_contributions', 'total_withdrawals', 'FREE Money from Investments',
+                     'total_portfolio']
 
     for col in currency_cols:
         if col in display_df.columns:

@@ -91,19 +91,22 @@ class UserDataManager:
                                          'INTEGER', '0')
         self.db.add_column_if_not_exists('user_events', 'account_name', 
                                          'TEXT', "''")
+        self.db.add_column_if_not_exists('user_profiles', 'ultimate_max_age', 
+                                         'INTEGER', '110')
     
     def save_user_profile(self, username: str, profile: Dict):
         """Save or update user profile."""
         self.db.execute_update("""
             INSERT OR REPLACE INTO user_profiles 
-            (username, current_age, target_age, work_end_age, current_work_income,
+            (username, current_age, target_age, ultimate_max_age, work_end_age, current_work_income,
              work_income_growth, ss_start_age, ss_monthly_benefit, ss_cola,
              inflation_rate, max_flex_reduction, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         """, (
             username,
             profile.get('current_age'),
             profile.get('target_age'),
+            profile.get('ultimate_max_age', 110),
             profile.get('work_end_age'),
             profile.get('current_work_income'),
             profile.get('work_income_growth'),
@@ -117,7 +120,7 @@ class UserDataManager:
     def load_user_profile(self, username: str) -> Optional[Dict]:
         """Load user profile."""
         rows = self.db.execute_query("""
-            SELECT current_age, target_age, work_end_age, current_work_income,
+            SELECT current_age, target_age, ultimate_max_age, work_end_age, current_work_income,
                    work_income_growth, ss_start_age, ss_monthly_benefit, ss_cola,
                    inflation_rate, max_flex_reduction
             FROM user_profiles WHERE username = ?
@@ -128,14 +131,15 @@ class UserDataManager:
             return {
                 'current_age': row[0],
                 'target_age': row[1],
-                'work_end_age': row[2],
-                'current_work_income': row[3],
-                'work_income_growth': row[4],
-                'ss_start_age': row[5],
-                'ss_monthly_benefit': row[6],
-                'ss_cola': row[7],
-                'inflation_rate': row[8],
-                'max_flex_reduction': row[9]
+                'ultimate_max_age': row[2],
+                'work_end_age': row[3],
+                'current_work_income': row[4],
+                'work_income_growth': row[5],
+                'ss_start_age': row[6],
+                'ss_monthly_benefit': row[7],
+                'ss_cola': row[8],
+                'inflation_rate': row[9],
+                'max_flex_reduction': row[10]
             }
         return None
     
@@ -340,6 +344,7 @@ class UserDataManager:
         default_profile = {
             'current_age': 45,
             'target_age': 90,
+            'ultimate_max_age': 110,
             'work_end_age': 68,
             'current_work_income': 35000,
             'work_income_growth': 0.02,

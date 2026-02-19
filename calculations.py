@@ -187,7 +187,8 @@ def run_comprehensive_projection(
     max_flex_reduction: float = 0.50,
     events: Optional[List[OneTimeEvent]] = None,
     inflation_rate: float = 0.03,
-    max_age: int = 110
+    max_age: int = 110,
+    ultimate_max_age: int = 110
 ) -> pd.DataFrame:
     """
     Year-by-year retirement projection.
@@ -200,14 +201,19 @@ def run_comprehensive_projection(
     5. Withdraw from accounts in priority order if still in deficit
     6. Apply investment returns to remaining balances
 
+    Args:
+        target_age: The retirement goal age (used for analysis, not projection end)
+        ultimate_max_age: The maximum age to project to (default 110)
+        max_age: Deprecated, use ultimate_max_age instead
+
     Returns:
         DataFrame with one row per year of the projection.
     """
     if events is None:
         events = []
 
-    # Project to target_age, but cap at max_age for safety
-    end_age = min(target_age, max_age)
+    # Use ultimate_max_age for projection length (fall back to max_age for backward compatibility)
+    end_age = ultimate_max_age if ultimate_max_age != 110 else max_age
     projection_years = end_age - current_age + 1
     results = []
 
@@ -469,9 +475,11 @@ def run_comprehensive_projection(
         # --- INVESTMENT RETURNS ---
 
         returns = {}
+        total_investment_returns = 0
         for acc in accounts:
             annual_return = account_balances[acc.name] * acc.annual_return
             returns[acc.name] = annual_return
+            total_investment_returns += annual_return
             account_balances[acc.name] += annual_return
 
         # --- PORTFOLIO STATUS ---
@@ -500,6 +508,7 @@ def run_comprehensive_projection(
             'contribution_shortfall': contribution_shortfall,
             'total_rmds': total_rmds,
             'total_withdrawals': total_withdrawals,
+            'total_investment_returns': total_investment_returns,
             'total_portfolio': total_portfolio,
             'portfolio_depleted': portfolio_depleted
         }
