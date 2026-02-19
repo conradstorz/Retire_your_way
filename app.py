@@ -2073,7 +2073,8 @@ with config_tabs[6]:
     display_cols = [
         'year', 'age', 
         'work_income', 'ss_income', 'total_income',
-        'core_expenses', 'flex_expenses_actual', 'total_expenses',
+        # 'core_expenses', 'flex_expenses_actual',  # Hidden - detail shown in charts
+        'total_expenses',
         'surplus_deficit', 
         'investment_contributions', 'total_withdrawals',
         'total_investment_returns', 
