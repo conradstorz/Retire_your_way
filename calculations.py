@@ -138,8 +138,16 @@ def can_contribute(account_type: str, age: int, work_end_age: int, continue_post
         continue_post_retirement: If True, allows contributions after work_end_age for eligible accounts
     """
     rule = CONTRIBUTION_STOP_RULES.get(account_type)
+    
+    # For accounts with no age limit (Roth IRA, Taxable Brokerage)
     if rule is None:
+        # If user doesn't want to continue after retirement, stop at work_end_age
+        if not continue_post_retirement:
+            return age < work_end_age
+        # Otherwise, allow contributions indefinitely
         return True
+    
+    # For 401k accounts (stop at work_end_age)
     if rule == 'work_end_age':
         return age < work_end_age
     
