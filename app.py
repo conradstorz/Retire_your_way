@@ -2068,68 +2068,46 @@ with config_tabs[6]:
     st.divider()
     st.subheader("Year-by-Year Detail")
 
-    try:
-        # Define columns to show in the table (modify this list to customize display)
-        # Note: 'core_expenses' and 'flex_expenses_actual' are also used by charts above
-        display_cols = [
-            'year', 'age', 
-            'work_income', 'ss_income', 'total_income',
-            # 'core_expenses', 'flex_expenses_actual',  # Hidden - detail shown in charts
-            'total_expenses',
-            'surplus_deficit', 
-            'investment_contributions', 'total_withdrawals',
-            'total_investment_returns', 
-            'total_portfolio'
-        ]
+    # Define columns to show in the table (modify this list to customize display)
+    display_cols = [
+        'year', 'age', 
+        'work_income', 'ss_income', 'total_income',
+        'total_expenses',
+        'surplus_deficit', 
+        'investment_contributions', 'total_withdrawals',
+        'total_investment_returns', 
+        'total_portfolio'
+    ]
 
-        # Create independent DataFrame for table display (does not affect charts or CSV)
-        display_df = projection[display_cols].copy()
-        
-        # Debug: Show what we have
-        st.write("DEBUG - Columns selected:", list(display_df.columns))
-        st.write("DEBUG - Data types:", display_df.dtypes.to_dict())
-        st.write("DEBUG - Shape:", display_df.shape)
-        st.write("DEBUG - First row:", display_df.iloc[0].to_dict())
+    # Create independent DataFrame for table display (does not affect charts or CSV)
+    display_df = projection[display_cols].copy()
 
-        # Rename columns for better readability
-        display_df = display_df.rename(columns={
-            'total_investment_returns': 'FREE Money from Investments',
-            'surplus_deficit': 'Surplus or Deficit'
-        })
+    # Rename columns for better readability
+    display_df = display_df.rename(columns={
+        'total_investment_returns': 'FREE Money from Investments',
+        'surplus_deficit': 'Surplus or Deficit'
+    })
 
-        # Format all numeric columns as currency (safely handles missing columns)
-        currency_cols = [
-            'work_income', 'ss_income', 'total_income', 
-            'core_expenses', 'flex_expenses_actual', 'total_expenses',
-            'Surplus or Deficit',
-            'investment_contributions', 'total_withdrawals', 
-            'FREE Money from Investments',
-            'total_portfolio'
-        ]
+    # Use column_config to format currency (keeps data as numbers, only formats display)
+    column_config = {
+        'work_income': st.column_config.NumberColumn('work_income', format='$%,.0f'),
+        'ss_income': st.column_config.NumberColumn('ss_income', format='$%,.0f'),
+        'total_income': st.column_config.NumberColumn('total_income', format='$%,.0f'),
+        'total_expenses': st.column_config.NumberColumn('total_expenses', format='$%,.0f'),
+        'Surplus or Deficit': st.column_config.NumberColumn('Surplus or Deficit', format='$%,.0f'),
+        'investment_contributions': st.column_config.NumberColumn('investment_contributions', format='$%,.0f'),
+        'total_withdrawals': st.column_config.NumberColumn('total_withdrawals', format='$%,.0f'),
+        'FREE Money from Investments': st.column_config.NumberColumn('FREE Money from Investments', format='$%,.0f'),
+        'total_portfolio': st.column_config.NumberColumn('total_portfolio', format='$%,.0f'),
+    }
 
-        for col in currency_cols:
-            if col in display_df.columns:
-                st.write(f"DEBUG - Formatting column: {col}")
-                display_df[col] = display_df[col].apply(lambda x: f'${x:,.0f}')
-                st.write(f"DEBUG - Successfully formatted {col}")
-
-        st.write("DEBUG - All formatting complete")
-        st.write("DEBUG - Column types after formatting:", display_df.dtypes.to_dict())
-        st.write("DEBUG - DataFrame info:", f"Shape: {display_df.shape}, Columns: {len(display_df.columns)}")
-        
-        # Try simplest possible st.dataframe call
-        st.write("DEBUG - About to call st.dataframe()...")
-        
-        # Display using st.dataframe
-        st.dataframe(display_df, use_container_width=True)
-        
-        st.write("DEBUG - st.dataframe() succeeded! Check browser console (F12) for any frontend errors.")
-        st.write("If you see 'TypeError: r.at is not a function' or similar, that's a known Streamlit issue with certain data types.")
-    except Exception as e:
-        st.error(f"Error displaying dataframe: {str(e)}")
-        st.error(f"Error type: {type(e).__name__}")
-        import traceback
-        st.code(traceback.format_exc())
+    st.dataframe(
+        display_df,
+        column_config=column_config,
+        use_container_width=True,
+        height=600,
+        hide_index=True
+    )
 
     csv = projection.to_csv(index=False)
     
