@@ -447,17 +447,9 @@ def run_comprehensive_projection(
             for acc in accounts:
                 withdrawals[acc.name] = 0
 
-        # --- INVESTMENT RETURNS ---
-
-        returns = {}
-        for acc in accounts:
-            annual_return = account_balances[acc.name] * acc.annual_return
-            returns[acc.name] = annual_return
-            account_balances[acc.name] += annual_return
-
         # --- ONE-TIME EVENTS (Portfolio Transactions) ---
         # Apply events as direct additions/withdrawals to specific accounts
-        # This happens AFTER normal income/expense/contribution flow
+        # This happens BEFORE investment returns so returns are calculated on post-event balance
 
         event_amount = 0
         event_description = ""
@@ -473,6 +465,14 @@ def run_comprehensive_projection(
                 if event_account in account_balances:
                     account_balances[event_account] -= event_amount
                 break
+
+        # --- INVESTMENT RETURNS ---
+
+        returns = {}
+        for acc in accounts:
+            annual_return = account_balances[acc.name] * acc.annual_return
+            returns[acc.name] = annual_return
+            account_balances[acc.name] += annual_return
 
         # --- PORTFOLIO STATUS ---
 
