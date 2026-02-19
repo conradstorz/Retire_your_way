@@ -2082,7 +2082,26 @@ with config_tabs[6]:
     # Create independent DataFrame for table display (does not affect charts or CSV)
     display_df = projection[display_cols].copy()
     
-    # Round all numeric columns to whole dollars
+    # CRITICAL: Round floats → convert to int → then format as strings
+    # ⚠️ TRIPPING HAZARD - DO NOT MODIFY THIS SEQUENCE ⚠️
+    # 
+    # Why this specific order matters:
+    # 1. Streamlit's dataframe renderer has issues with mixed data types (int + object/string)
+    # 2. Simply using .apply(lambda x: f'${x:,.0f}') on float64 columns creates:
+    #    - int64 columns (year, age) 
+    #    - object columns (formatted currency strings)
+    #    This mix causes JavaScript errors in browser: "TypeError: r.at is not a function"
+    # 
+    # 3. st.column_config.NumberColumn with format parameter doesn't work reliably
+    #    Format strings like format="$%,.0f" or format="$ %.0f" are ignored or misrendered
+    # 
+    # SOLUTION: Convert floats to integers FIRST, then apply string formatting
+    # - .round(0) eliminates decimal places
+    # - .astype(int) converts to clean integers (no floating point artifacts)
+    # - Then f'${x:,}' formats with dollar sign and thousand separators
+    # 
+    # This produces consistent string types that Streamlit can reliably render.
+    # If you need to modify display formats, maintain this conversion sequence.
     numeric_cols = display_df.select_dtypes(include=['float64']).columns
     display_df[numeric_cols] = display_df[numeric_cols].round(0).astype(int)
 
@@ -2092,7 +2111,8 @@ with config_tabs[6]:
         'surplus_deficit': 'Surplus or Deficit'
     })
 
-    # Format as currency strings with commas
+    # Format currency columns with $ and commas
+    # Applied AFTER int conversion above - formats clean integers as currency strings
     currency_cols = ['work_income', 'ss_income', 'total_income', 'total_expenses',
                      'Surplus or Deficit', 'investment_contributions', 'total_withdrawals',
                      'FREE Money from Investments', 'total_portfolio']
