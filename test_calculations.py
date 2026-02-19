@@ -145,6 +145,40 @@ class TestSocialSecurity:
         assert abs(result.iloc[1]['ss_income'] - 24600) < 1
         assert abs(result.iloc[2]['ss_income'] - 25215) < 1
         assert abs(result.iloc[3]['ss_income'] - 25845.375) < 1
+    
+    def test_work_income_and_ss_income_simultaneous(self):
+        """Should support work income and Social Security income at the same time"""
+        result = run_comprehensive_projection(
+            current_age=67,
+            target_age=72,
+            current_work_income=50000,
+            work_end_age=70,  # Work continues for 3 years after SS starts
+            ss_start_age=67,
+            ss_monthly_benefit=2000,
+            accounts=[AccountBucket("IRA", 300000, 0.07, 1, "traditional_ira", 0)],
+            expense_categories=[ExpenseCategory("Living", 40000, "CORE")],
+        )
+        
+        # Age 67-69: both work income AND SS income should be present
+        # Age 70+: only SS income
+        
+        # Age 67: work + SS
+        assert result.iloc[0]['work_income'] > 0, "Should have work income at 67"
+        assert result.iloc[0]['ss_income'] > 0, "Should have SS income at 67"
+        assert abs(result.iloc[0]['total_income'] - (result.iloc[0]['work_income'] + result.iloc[0]['ss_income'])) < 1
+        
+        # Age 68: work + SS
+        assert result.iloc[1]['work_income'] > 0, "Should have work income at 68"
+        assert result.iloc[1]['ss_income'] > 0, "Should have SS income at 68"
+        
+        # Age 69: work + SS
+        assert result.iloc[2]['work_income'] > 0, "Should have work income at 69"
+        assert result.iloc[2]['ss_income'] > 0, "Should have SS income at 69"
+        
+        # Age 70: only SS (work stopped)
+        assert result.iloc[3]['work_income'] == 0, "Work income should stop at 70"
+        assert result.iloc[3]['ss_income'] > 0, "Should still have SS income at 70"
+        assert abs(result.iloc[3]['total_income'] - result.iloc[3]['ss_income']) < 1
 
 
 class TestExpenseInflation:
