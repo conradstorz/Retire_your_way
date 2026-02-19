@@ -372,36 +372,42 @@ with data_col:
     import json
     from datetime import datetime
     
-    # Export all user data as JSON
-    all_user_data = {
-        "export_date": datetime.now().isoformat(),
-        "username": username,
-        "version": "1.0.0",
-        "profile": user_profile,
-        "accounts": user_accounts,
-        "expenses": user_expenses,
-        "events": user_events
-    }
-    
-    # Add snapshots for each account
-    all_snapshots = {}
-    for account in user_accounts:
-        snapshots = db_manager.load_snapshots(username, account['name'])
-        if snapshots:
-            all_snapshots[account['name']] = snapshots
-    
-    if all_snapshots:
-        all_user_data["snapshots"] = all_snapshots
-    
-    json_data = json.dumps(all_user_data, indent=2)
+    # Generate export data only once per session or when explicitly requested
+    # This prevents media file storage churn on every page rerun
+    if 'export_data' not in st.session_state or st.session_state.get('refresh_export', False):
+        # Export all user data as JSON
+        all_user_data = {
+            "export_date": datetime.now().isoformat(),
+            "username": username,
+            "version": "1.0.0",
+            "profile": user_profile,
+            "accounts": user_accounts,
+            "expenses": user_expenses,
+            "events": user_events
+        }
+        
+        # Add snapshots for each account
+        all_snapshots = {}
+        for account in user_accounts:
+            snapshots = db_manager.load_snapshots(username, account['name'])
+            if snapshots:
+                all_snapshots[account['name']] = snapshots
+        
+        if all_snapshots:
+            all_user_data["snapshots"] = all_snapshots
+        
+        st.session_state.export_data = json.dumps(all_user_data, indent=2)
+        st.session_state.export_filename = f"retirement_data_{username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        st.session_state.refresh_export = False
     
     st.download_button(
         label="💾 Export Data",
-        data=json_data,
-        file_name=f"retirement_data_{username}_{datetime.now().strftime('%Y%m%d')}.json",
+        data=st.session_state.export_data,
+        file_name=st.session_state.export_filename,
         mime="application/json",
         help="Export all your configuration data",
-        use_container_width=True
+        use_container_width=True,
+        key="export_data_button"
     )
     
     # Import data button
@@ -436,6 +442,9 @@ if st.session_state.get('show_import', False):
         st.write("")  # Spacing
         if st.button("❌ Cancel", key="cancel_import"):
             st.session_state.show_import = False
+            # Clear file uploader to prevent stale file reference errors
+            if 'import_json_header' in st.session_state:
+                del st.session_state['import_json_header']
             st.rerun()
     
     if uploaded_file is not None:
@@ -613,11 +622,14 @@ if st.session_state.get('show_import', False):
                             except Exception as e:
                                 import_errors.append(f"Snapshots: {str(e)}")
                         
-                        # Clear the import flag
+                        # Clear the import flag and file uploader
                         st.session_state.show_import = False
+                        if 'import_json_header' in st.session_state:
+                            del st.session_state['import_json_header']
                         
                         # Show results
                         if import_results and not import_errors:
+                            st.session_state.refresh_export = True  # Refresh export data with imported data
                             st.success(f"✅ **Import Complete!** Imported: {', '.join(import_results)}")
                             st.balloons()
                         elif import_results and import_errors:
@@ -631,6 +643,9 @@ if st.session_state.get('show_import', False):
                     except Exception as e:
                         st.error(f"❌ Unexpected error during import: {str(e)}")
                         st.session_state.show_import = False
+                        # Clear file uploader to prevent stale file reference errors
+                        if 'import_json_header' in st.session_state:
+                            del st.session_state['import_json_header']
                 
         except json.JSONDecodeError as e:
             st.error(f"❌ **Invalid JSON file:** {str(e)}")
@@ -1015,6 +1030,7 @@ with config_tabs[1]:
         db_manager.save_user_accounts(username, st.session_state.accounts)
         db_manager.save_user_expenses(username, st.session_state.expense_categories)
         db_manager.save_user_events(username, st.session_state.events)
+        st.session_state.refresh_export = True  # Refresh export data with latest changes
         st.success("Configuration saved!")
         st.balloons()
 
@@ -1028,6 +1044,7 @@ with config_tabs[2]:
         st.write("")
         if st.button("💾 Save Accounts", key="save_accounts_header", type="primary"):
             db_manager.save_user_accounts(username, st.session_state.accounts)
+            st.session_state.refresh_export = True  # Refresh export data with latest changes
             st.success("Accounts saved!")
     
     st.caption("Each account has a type (which controls contribution rules), a planned annual "
@@ -1203,6 +1220,7 @@ with config_tabs[2]:
                         key=f"del_snap_{i}_{s_idx}"
                     ):
                         db_manager.delete_snapshot(username, snap['id'])
+                        st.session_state.refresh_export = True  # Refresh export data after deletion
                         st.rerun()
 
                 # Auto-update balance from most recent snapshot
@@ -1247,6 +1265,7 @@ with config_tabs[2]:
                     snap_contributed, snap_value
                 )
                 acc['balance'] = snap_value
+                st.session_state.refresh_export = True  # Refresh export data with latest snapshot
                 st.rerun()
 
     # Add new account button
@@ -1275,6 +1294,7 @@ with config_tabs[3]:
         st.write("")
         if st.button("💾 Save Expenses", key="save_expenses_header", type="primary"):
             db_manager.save_user_expenses(username, st.session_state.expense_categories)
+            st.session_state.refresh_export = True  # Refresh export data with latest changes
             st.success("Expenses saved!")
     
     st.caption("CORE expenses cannot be reduced. FLEX expenses can be cut up to the max % if needed.")
@@ -1363,6 +1383,7 @@ with config_tabs[4]:
         st.write("")
         if st.button("💾 Save Events", key="save_events_header", type="primary"):
             db_manager.save_user_events(username, st.session_state.events)
+            st.session_state.refresh_export = True  # Refresh export data with latest changes
             st.success("Events saved!")
     
     # Add custom CSS for left-aligned event buttons
