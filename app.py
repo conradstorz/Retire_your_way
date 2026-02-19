@@ -2082,9 +2082,9 @@ with config_tabs[6]:
     # Create independent DataFrame for table display (does not affect charts or CSV)
     display_df = projection[display_cols].copy()
     
-    # Round all numeric columns to whole dollars (eliminates floating point artifacts)
+    # Round all numeric columns to whole dollars
     numeric_cols = display_df.select_dtypes(include=['float64']).columns
-    display_df[numeric_cols] = display_df[numeric_cols].round(0)
+    display_df[numeric_cols] = display_df[numeric_cols].round(0).astype(int)
 
     # Rename columns for better readability
     display_df = display_df.rename(columns={
@@ -2092,22 +2092,17 @@ with config_tabs[6]:
         'surplus_deficit': 'Surplus or Deficit'
     })
 
-    # Use column_config to format currency (keeps data as numbers, only formats display)
-    column_config = {
-        'work_income': st.column_config.NumberColumn('work_income', format="$%,.0f"),
-        'ss_income': st.column_config.NumberColumn('ss_income', format="$%,.0f"),
-        'total_income': st.column_config.NumberColumn('total_income', format="$%,.0f"),
-        'total_expenses': st.column_config.NumberColumn('total_expenses', format="$%,.0f"),
-        'Surplus or Deficit': st.column_config.NumberColumn('Surplus or Deficit', format="$%,.0f"),
-        'investment_contributions': st.column_config.NumberColumn('investment_contributions', format="$%,.0f"),
-        'total_withdrawals': st.column_config.NumberColumn('total_withdrawals', format="$%,.0f"),
-        'FREE Money from Investments': st.column_config.NumberColumn('FREE Money from Investments', format="$%,.0f"),
-        'total_portfolio': st.column_config.NumberColumn('total_portfolio', format="$%,.0f"),
-    }
+    # Format as currency strings with commas
+    currency_cols = ['work_income', 'ss_income', 'total_income', 'total_expenses',
+                     'Surplus or Deficit', 'investment_contributions', 'total_withdrawals',
+                     'FREE Money from Investments', 'total_portfolio']
+    
+    for col in currency_cols:
+        if col in display_df.columns:
+            display_df[col] = display_df[col].apply(lambda x: f'${x:,}')
 
     st.dataframe(
         display_df,
-        column_config=column_config,
         use_container_width=True,
         height=600,
         hide_index=True
