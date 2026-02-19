@@ -206,7 +206,9 @@ def run_comprehensive_projection(
     if events is None:
         events = []
 
-    projection_years = max_age - current_age + 1
+    # Project to target_age, but cap at max_age for safety
+    end_age = min(target_age, max_age)
+    projection_years = end_age - current_age + 1
     results = []
 
     # Calculate birth year and determine RMD starting age

@@ -23,6 +23,13 @@ wheels/
 .installed.cfg
 *.egg
 
+# Testing
+.pytest_cache/
+.hypothesis/
+.coverage
+htmlcov/
+*.cover
+
 # IDE
 .vscode/
 .idea/
@@ -33,6 +40,9 @@ wheels/
 # OS
 .DS_Store
 Thumbs.db
+nul
+*.tmp
+*.log
 
 # Streamlit
 .streamlit/secrets.toml
