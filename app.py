@@ -2090,15 +2090,15 @@ with config_tabs[6]:
 
     # Use column_config to format currency (keeps data as numbers, only formats display)
     column_config = {
-        'work_income': st.column_config.NumberColumn('work_income', format='$%,.0f'),
-        'ss_income': st.column_config.NumberColumn('ss_income', format='$%,.0f'),
-        'total_income': st.column_config.NumberColumn('total_income', format='$%,.0f'),
-        'total_expenses': st.column_config.NumberColumn('total_expenses', format='$%,.0f'),
-        'Surplus or Deficit': st.column_config.NumberColumn('Surplus or Deficit', format='$%,.0f'),
-        'investment_contributions': st.column_config.NumberColumn('investment_contributions', format='$%,.0f'),
-        'total_withdrawals': st.column_config.NumberColumn('total_withdrawals', format='$%,.0f'),
-        'FREE Money from Investments': st.column_config.NumberColumn('FREE Money from Investments', format='$%,.0f'),
-        'total_portfolio': st.column_config.NumberColumn('total_portfolio', format='$%,.0f'),
+        'work_income': st.column_config.NumberColumn('work_income', format="$ %,.0f"),
+        'ss_income': st.column_config.NumberColumn('ss_income', format="$ %,.0f"),
+        'total_income': st.column_config.NumberColumn('total_income', format="$ %,.0f"),
+        'total_expenses': st.column_config.NumberColumn('total_expenses', format="$ %,.0f"),
+        'Surplus or Deficit': st.column_config.NumberColumn('Surplus or Deficit', format="$ %,.0f"),
+        'investment_contributions': st.column_config.NumberColumn('investment_contributions', format="$ %,.0f"),
+        'total_withdrawals': st.column_config.NumberColumn('total_withdrawals', format="$ %,.0f"),
+        'FREE Money from Investments': st.column_config.NumberColumn('FREE Money from Investments', format="$ %,.0f"),
+        'total_portfolio': st.column_config.NumberColumn('total_portfolio', format="$ %,.0f"),
     }
 
     st.dataframe(
