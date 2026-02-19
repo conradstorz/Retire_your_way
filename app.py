@@ -1877,6 +1877,9 @@ with config_tabs[5]:
 with config_tabs[6]:
     st.subheader("Financial Overview")
 
+    # Filter projection to target_age for chart display
+    projection_display = projection[projection['age'] <= target_age].copy()
+
     # Summary stats
     years_working = len(projection[projection['work_income'] > 0])
     years_on_ss = len(projection[projection['ss_income'] > 0])
@@ -1898,8 +1901,8 @@ with config_tabs[6]:
     # Row 1: Total portfolio
     fig.add_trace(
         go.Scatter(
-            x=projection['age'],
-            y=projection['total_portfolio'],
+            x=projection_display['age'],
+            y=projection_display['total_portfolio'],
             mode='lines',
             name='Total Portfolio',
             fill='tozeroy',
@@ -1913,8 +1916,8 @@ with config_tabs[6]:
     # Row 2: Income and expenses
     fig.add_trace(
         go.Scatter(
-            x=projection['age'],
-            y=projection['total_income'],
+            x=projection_display['age'],
+            y=projection_display['total_income'],
             mode='lines',
             name='Income',
             line=dict(color='blue')
@@ -1924,8 +1927,8 @@ with config_tabs[6]:
 
     fig.add_trace(
         go.Scatter(
-            x=projection['age'],
-            y=projection['total_expenses'],
+            x=projection_display['age'],
+            y=projection_display['total_expenses'],
             mode='lines',
             name='Expenses',
             line=dict(color='orange')
@@ -1936,11 +1939,11 @@ with config_tabs[6]:
     # Row 3: Individual accounts
     for acc in st.session_state.accounts:
         col_name = f"{acc['name']}_balance"
-        if col_name in projection.columns:
+        if col_name in projection_display.columns:
             fig.add_trace(
                 go.Scatter(
-                    x=projection['age'],
-                    y=projection[col_name],
+                    x=projection_display['age'],
+                    y=projection_display[col_name],
                     mode='lines',
                     name=acc['name'],
                     stackgroup='one'
@@ -1964,8 +1967,8 @@ with config_tabs[6]:
     fig = go.Figure()
 
     fig.add_trace(go.Scatter(
-        x=projection['age'],
-        y=projection['total_portfolio'],
+        x=projection_display['age'],
+        y=projection_display['total_portfolio'],
         mode='lines',
         name='Total Portfolio',
         fill='tozeroy',
@@ -2004,8 +2007,8 @@ with config_tabs[6]:
 
     fig.add_trace(
         go.Scatter(
-            x=projection['age'],
-            y=projection['work_income'],
+            x=projection_display['age'],
+            y=projection_display['work_income'],
             mode='lines',
             name='Work Income',
             stackgroup='income',
@@ -2016,8 +2019,8 @@ with config_tabs[6]:
 
     fig.add_trace(
         go.Scatter(
-            x=projection['age'],
-            y=projection['ss_income'],
+            x=projection_display['age'],
+            y=projection_display['ss_income'],
             mode='lines',
             name='Social Security',
             stackgroup='income',
@@ -2028,8 +2031,8 @@ with config_tabs[6]:
 
     fig.add_trace(
         go.Scatter(
-            x=projection['age'],
-            y=projection['core_expenses'],
+            x=projection_display['age'],
+            y=projection_display['core_expenses'],
             mode='lines',
             name='Core Expenses',
             stackgroup='expenses',
@@ -2040,8 +2043,8 @@ with config_tabs[6]:
 
     fig.add_trace(
         go.Scatter(
-            x=projection['age'],
-            y=projection['flex_expenses_actual'],
+            x=projection_display['age'],
+            y=projection_display['flex_expenses_actual'],
             mode='lines',
             name='Flexible Expenses',
             stackgroup='expenses',
@@ -2076,11 +2079,12 @@ with config_tabs[6]:
 
     # Rename columns for better readability
     display_df = display_df.rename(columns={
-        'total_investment_returns': 'FREE Money from Investments'
+        'total_investment_returns': 'FREE Money from Investments',
+        'surplus_deficit': 'Surplus or Deficit'
     })
 
     currency_cols = ['work_income', 'ss_income', 'total_income', 'core_expenses',
-                     'flex_expenses_actual', 'total_expenses', 'surplus_deficit',
+                     'flex_expenses_actual', 'total_expenses', 'Surplus or Deficit',
                      'investment_contributions', 'total_withdrawals', 'FREE Money from Investments',
                      'total_portfolio']
 
