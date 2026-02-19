@@ -2109,15 +2109,32 @@ with config_tabs[6]:
 
         for col in currency_cols:
             if col in display_df.columns:
+                st.write(f"DEBUG - Formatting column: {col}")
                 display_df[col] = display_df[col].apply(lambda x: f'${x:,.0f}')
+                st.write(f"DEBUG - Successfully formatted {col}")
 
-        st.write("DEBUG - After formatting:", display_df.head())
-
-        st.dataframe(
-            display_df,
-            width='stretch',
-            height=600
-        )
+        st.write("DEBUG - All formatting complete")
+        st.write("DEBUG - Column types after formatting:", display_df.dtypes.to_dict())
+        
+        try:
+            st.write("DEBUG - Attempting to show head()...")
+            st.write(display_df.head())
+            st.write("DEBUG - head() displayed successfully")
+        except Exception as e2:
+            st.error(f"Error in st.write(head()): {e2}")
+        
+        try:
+            st.write("DEBUG - Attempting st.dataframe()...")
+            st.dataframe(
+                display_df,
+                width='stretch',
+                height=600
+            )
+            st.write("DEBUG - st.dataframe() succeeded!")
+        except Exception as e3:
+            st.error(f"Error in st.dataframe(): {e3}")
+            import traceback
+            st.code(traceback.format_exc())
     except Exception as e:
         st.error(f"Error displaying dataframe: {str(e)}")
         st.error(f"Error type: {type(e).__name__}")
