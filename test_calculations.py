@@ -339,22 +339,22 @@ class TestAccountContributions:
             current_age=64,
             target_age=70,
             current_work_income=100000,
-            work_end_age=66,
+            work_end_age=67,  # Realistic: work until SS starts
             ss_start_age=67,
             ss_monthly_benefit=3000,  # Sufficient income
             accounts=[AccountBucket("Roth", 300000, 0.07, 1, "roth_ira", 7000, True)],  # continue_post_retirement=True
             expense_categories=[ExpenseCategory("Living", 30000, "CORE")],
         )
         
-        # Age 64-65: working, contributions
-        # Age 66+: NOT working, but Roth IRA should continue (continue_post_retirement=True)
-        # Contributions may be reduced if income insufficient, but should be attempted
+        # Age 64-66: working, contributions
+        # Age 67+: SS income begins when work ends, Roth IRA should continue (continue_post_retirement=True)
+        # With $36k SS income and $30k expenses, should have surplus for contributions
         
         assert result.iloc[0]['Roth_contribution'] > 0  # Age 64
         assert result.iloc[1]['Roth_contribution'] > 0  # Age 65
-        # After retirement, contributions continue if income allows
-        # With $36k SS income and $30k expenses, should have surplus for contributions
         assert result.iloc[2]['Roth_contribution'] > 0  # Age 66
+        # After retirement, contributions continue if income allows
+        assert result.iloc[3]['Roth_contribution'] > 0  # Age 67 - SS income now active
     
     def test_contributions_funded_from_income_surplus(self):
         """Contributions should be funded from income surplus first"""
