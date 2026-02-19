@@ -2068,47 +2068,61 @@ with config_tabs[6]:
     st.divider()
     st.subheader("Year-by-Year Detail")
 
-    # Define columns to show in the table (modify this list to customize display)
-    # Note: 'core_expenses' and 'flex_expenses_actual' are also used by charts above
-    display_cols = [
-        'year', 'age', 
-        'work_income', 'ss_income', 'total_income',
-        # 'core_expenses', 'flex_expenses_actual',  # Hidden - detail shown in charts
-        'total_expenses',
-        'surplus_deficit', 
-        'investment_contributions', 'total_withdrawals',
-        'total_investment_returns', 
-        'total_portfolio'
-    ]
+    try:
+        # Define columns to show in the table (modify this list to customize display)
+        # Note: 'core_expenses' and 'flex_expenses_actual' are also used by charts above
+        display_cols = [
+            'year', 'age', 
+            'work_income', 'ss_income', 'total_income',
+            # 'core_expenses', 'flex_expenses_actual',  # Hidden - detail shown in charts
+            'total_expenses',
+            'surplus_deficit', 
+            'investment_contributions', 'total_withdrawals',
+            'total_investment_returns', 
+            'total_portfolio'
+        ]
 
-    # Create independent DataFrame for table display (does not affect charts or CSV)
-    display_df = projection[display_cols].copy()
+        # Create independent DataFrame for table display (does not affect charts or CSV)
+        display_df = projection[display_cols].copy()
+        
+        # Debug: Show what we have
+        st.write("DEBUG - Columns selected:", list(display_df.columns))
+        st.write("DEBUG - Data types:", display_df.dtypes.to_dict())
+        st.write("DEBUG - Shape:", display_df.shape)
+        st.write("DEBUG - First row:", display_df.iloc[0].to_dict())
 
-    # Rename columns for better readability
-    display_df = display_df.rename(columns={
-        'total_investment_returns': 'FREE Money from Investments',
-        'surplus_deficit': 'Surplus or Deficit'
-    })
+        # Rename columns for better readability
+        display_df = display_df.rename(columns={
+            'total_investment_returns': 'FREE Money from Investments',
+            'surplus_deficit': 'Surplus or Deficit'
+        })
 
-    # Format all numeric columns as currency (safely handles missing columns)
-    currency_cols = [
-        'work_income', 'ss_income', 'total_income', 
-        'core_expenses', 'flex_expenses_actual', 'total_expenses',
-        'Surplus or Deficit',
-        'investment_contributions', 'total_withdrawals', 
-        'FREE Money from Investments',
-        'total_portfolio'
-    ]
+        # Format all numeric columns as currency (safely handles missing columns)
+        currency_cols = [
+            'work_income', 'ss_income', 'total_income', 
+            'core_expenses', 'flex_expenses_actual', 'total_expenses',
+            'Surplus or Deficit',
+            'investment_contributions', 'total_withdrawals', 
+            'FREE Money from Investments',
+            'total_portfolio'
+        ]
 
-    for col in currency_cols:
-        if col in display_df.columns:
-            display_df[col] = display_df[col].apply(lambda x: f'${x:,.0f}')
+        for col in currency_cols:
+            if col in display_df.columns:
+                display_df[col] = display_df[col].apply(lambda x: f'${x:,.0f}')
 
-    st.dataframe(
-        display_df,
-        width='stretch',
-        height=600
-    )
+        st.write("DEBUG - After formatting:", display_df.head())
+
+        st.dataframe(
+            display_df,
+            width='stretch',
+            height=600
+        )
+    except Exception as e:
+        st.error(f"Error displaying dataframe: {str(e)}")
+        st.error(f"Error type: {type(e).__name__}")
+        import traceback
+        st.code(traceback.format_exc())
 
     csv = projection.to_csv(index=False)
     
