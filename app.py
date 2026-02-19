@@ -2068,13 +2068,19 @@ with config_tabs[6]:
     st.divider()
     st.subheader("Year-by-Year Detail")
 
+    # Define columns to show in the table (modify this list to customize display)
+    # Note: 'core_expenses' and 'flex_expenses_actual' are also used by charts above
     display_cols = [
-        'year', 'age', 'work_income', 'ss_income', 'total_income',
+        'year', 'age', 
+        'work_income', 'ss_income', 'total_income',
         'core_expenses', 'flex_expenses_actual', 'total_expenses',
-        'surplus_deficit', 'investment_contributions', 'total_withdrawals',
-        'total_investment_returns', 'total_portfolio'
+        'surplus_deficit', 
+        'investment_contributions', 'total_withdrawals',
+        'total_investment_returns', 
+        'total_portfolio'
     ]
 
+    # Create independent DataFrame for table display (does not affect charts or CSV)
     display_df = projection[display_cols].copy()
 
     # Rename columns for better readability
@@ -2083,10 +2089,15 @@ with config_tabs[6]:
         'surplus_deficit': 'Surplus or Deficit'
     })
 
-    currency_cols = ['work_income', 'ss_income', 'total_income', 'core_expenses',
-                     'flex_expenses_actual', 'total_expenses', 'Surplus or Deficit',
-                     'investment_contributions', 'total_withdrawals', 'FREE Money from Investments',
-                     'total_portfolio']
+    # Format all numeric columns as currency (safely handles missing columns)
+    currency_cols = [
+        'work_income', 'ss_income', 'total_income', 
+        'core_expenses', 'flex_expenses_actual', 'total_expenses',
+        'Surplus or Deficit',
+        'investment_contributions', 'total_withdrawals', 
+        'FREE Money from Investments',
+        'total_portfolio'
+    ]
 
     for col in currency_cols:
         if col in display_df.columns:
