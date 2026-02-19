@@ -2115,26 +2115,16 @@ with config_tabs[6]:
 
         st.write("DEBUG - All formatting complete")
         st.write("DEBUG - Column types after formatting:", display_df.dtypes.to_dict())
+        st.write("DEBUG - DataFrame info:", f"Shape: {display_df.shape}, Columns: {len(display_df.columns)}")
         
-        try:
-            st.write("DEBUG - Attempting to show head()...")
-            st.write(display_df.head())
-            st.write("DEBUG - head() displayed successfully")
-        except Exception as e2:
-            st.error(f"Error in st.write(head()): {e2}")
+        # Try simplest possible st.dataframe call
+        st.write("DEBUG - About to call st.dataframe()...")
         
-        try:
-            st.write("DEBUG - Attempting st.dataframe()...")
-            st.dataframe(
-                display_df,
-                width='stretch',
-                height=600
-            )
-            st.write("DEBUG - st.dataframe() succeeded!")
-        except Exception as e3:
-            st.error(f"Error in st.dataframe(): {e3}")
-            import traceback
-            st.code(traceback.format_exc())
+        # Display using st.dataframe
+        st.dataframe(display_df, use_container_width=True)
+        
+        st.write("DEBUG - st.dataframe() succeeded! Check browser console (F12) for any frontend errors.")
+        st.write("If you see 'TypeError: r.at is not a function' or similar, that's a known Streamlit issue with certain data types.")
     except Exception as e:
         st.error(f"Error displaying dataframe: {str(e)}")
         st.error(f"Error type: {type(e).__name__}")
