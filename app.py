@@ -1557,6 +1557,18 @@ with config_tabs[4]:
 # ===== RUN PROJECTION =====
 # Computed after all config tabs so it uses current widget values.
 
+# Extract user profile values for projection (these may have been updated in the config tabs)
+current_age = int(user_profile['current_age'])
+target_age = int(user_profile['target_age'])
+ultimate_max_age = int(user_profile.get('ultimate_max_age', 110))
+work_end_age = int(user_profile['work_end_age'])
+current_work_income = float(user_profile['current_work_income'])
+ss_start_age = int(user_profile['ss_start_age'])
+ss_monthly_benefit = float(user_profile['ss_monthly_benefit'])
+ss_cola = float(user_profile['ss_cola'])
+inflation_rate = float(user_profile['inflation_rate'])
+max_flex_reduction = float(user_profile['max_flex_reduction'])
+
 # Ensure backward compatibility for accounts that may not have all fields
 accounts = []
 for acc in st.session_state.accounts:
