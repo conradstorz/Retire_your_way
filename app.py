@@ -1603,6 +1603,9 @@ events_list = [
     for evt in st.session_state.events
 ]
 
+# Get historical snapshot data
+historical_summaries = db_manager.get_historical_year_summaries(username)
+
 projection = run_comprehensive_projection(
     current_age=current_age,
     target_age=target_age,
@@ -1616,7 +1619,8 @@ projection = run_comprehensive_projection(
     max_flex_reduction=max_flex_reduction,
     events=events_list,
     inflation_rate=inflation_rate,
-    ultimate_max_age=ultimate_max_age
+    ultimate_max_age=ultimate_max_age,
+    historical_summaries=historical_summaries
 )
 
 analysis = analyze_retirement_plan(
@@ -2075,7 +2079,7 @@ with config_tabs[6]:
         'total_expenses',
         'surplus_deficit', 
         'investment_contributions', 'total_withdrawals',
-        'total_investment_returns', 
+        'total_investment_returns', 'investment_roi',
         'total_portfolio'
     ]
 
@@ -2097,29 +2101,37 @@ with config_tabs[6]:
     # 
     # SOLUTION: Convert floats to integers FIRST, then apply string formatting
     # - .round(0) eliminates decimal places
+    # - .fillna() handles NaN values from historical rows (shows as empty string)
     # - .astype(int) converts to clean integers (no floating point artifacts)
     # - Then f'${x:,}' formats with dollar sign and thousand separators
     # 
     # This produces consistent string types that Streamlit can reliably render.
     # If you need to modify display formats, maintain this conversion sequence.
-    numeric_cols = display_df.select_dtypes(include=['float64']).columns
-    display_df[numeric_cols] = display_df[numeric_cols].round(0).astype(int)
-
-    # Rename columns for better readability
+    
+    # Format investment_roi as percentage before converting other columns
+    if 'investment_roi' in display_df.columns:
+        display_df['investment_roi'] = display_df['investment_roi'].apply(
+            lambda x: f'{x*100:.1f}%' if pd.notna(x) else ''
+        )
+    
+    # Rename columns for better readability FIRST (before numeric conversion)
     display_df = display_df.rename(columns={
         'total_investment_returns': 'FREE Money from Investments',
-        'surplus_deficit': 'Surplus or Deficit'
+        'surplus_deficit': 'Surplus or Deficit',
+        'investment_roi': 'Investment ROI'
     })
 
-    # Format currency columns with $ and commas
-    # Applied AFTER int conversion above - formats clean integers as currency strings
+    # Format currency columns, handling NaN values from historical rows
+    # Applied directly without int conversion step to handle NaN gracefully
     currency_cols = ['work_income', 'ss_income', 'total_income', 'total_expenses',
                      'Surplus or Deficit', 'investment_contributions', 'total_withdrawals',
                      'FREE Money from Investments', 'total_portfolio']
     
     for col in currency_cols:
         if col in display_df.columns:
-            display_df[col] = display_df[col].apply(lambda x: f'${x:,}')
+            display_df[col] = display_df[col].apply(
+                lambda x: f'${int(round(x)):,}' if pd.notna(x) else ''
+            )
 
     st.dataframe(
         display_df,

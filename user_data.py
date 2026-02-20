@@ -330,6 +330,105 @@ class UserDataManager:
             WHERE username = ? AND account_name = ?
         """, (new_name, username, old_name))
 
+    def get_historical_year_summaries(self, username: str) -> List[Dict]:
+        """
+        Aggregate all account snapshots by calendar year.
+        
+        Returns a list of dictionaries, one per calendar year with:
+        - calendar_year: int
+        - total_value: portfolio value at year-end
+        - total_contributions: sum of contributions in that year
+        - total_growth: investment growth (total_value - prev_year_value - contributions)
+        - annualized_roi: growth / starting balance, annualized
+        
+        Years are ordered chronologically (oldest first).
+        """
+        from datetime import datetime
+        from collections import defaultdict
+        
+        # Get all snapshots for this user, across all accounts
+        rows = self.db.execute_query("""
+            SELECT account_name, snapshot_date, amount_contributed, total_value
+            FROM account_snapshots
+            WHERE username = ?
+            ORDER BY snapshot_date
+        """, (username,))
+        
+        if not rows:
+            return []
+        
+        # Group snapshots by calendar year and account
+        # For each year+account combo, track all snapshots
+        yearly_account_data = defaultdict(lambda: defaultdict(list))
+        
+        for row in rows:
+            account_name, date_str, contributed, total_value = row
+            date = datetime.strptime(date_str, '%Y-%m-%d')
+            calendar_year = date.year
+            
+            yearly_account_data[calendar_year][account_name].append({
+                'date': date,
+                'contributed': contributed,
+                'total_value': total_value
+            })
+        
+        # Build year-by-year summaries
+        results = []
+        previous_year_total = None  # Ending balance from previous calendar year
+        
+        for calendar_year in sorted(yearly_account_data.keys()):
+            year_start_total = 0
+            year_end_total = 0
+            year_contributions = 0
+            
+            # For each account in this year
+            for account_name, snapshots in yearly_account_data[calendar_year].items():
+                # Sort snapshots by date (should already be sorted, but be sure)
+                snapshots.sort(key=lambda s: s['date'])
+                
+                # First snapshot in this year for this account
+                first_snapshot = snapshots[0]
+                # Last snapshot in this year for this account (for year-end balance)
+                last_snapshot = snapshots[-1]
+                
+                # Starting balance for this account this year:
+                # It's the first snapshot's value minus its contribution
+                account_start = first_snapshot['total_value'] - first_snapshot['contributed']
+                year_start_total += account_start
+                
+                # Ending balance is the last snapshot's value
+                year_end_total += last_snapshot['total_value']
+                
+                # Sum all contributions for this account this year
+                for snapshot in snapshots:
+                    year_contributions += snapshot['contributed']
+            
+            # For the first year, if we had no previous data, use the computed start
+            if previous_year_total is None:
+                previous_year_total = year_start_total
+            
+            # Growth = ending - beginning - contributions
+            growth = year_end_total - previous_year_total - year_contributions
+            
+            # Annualized ROI = growth / beginning balance
+            if previous_year_total > 0:
+                roi = growth / previous_year_total
+            else:
+                roi = 0 if growth <= 0 else 1.0
+            
+            results.append({
+                'calendar_year': calendar_year,
+                'total_value': year_end_total,
+                'total_contributions': year_contributions,
+                'total_growth': growth,
+                'annualized_roi': roi
+            })
+            
+            # This year's ending becomes next year's beginning
+            previous_year_total = year_end_total
+        
+        return results
+
     def user_exists(self, username: str) -> bool:
         """Check if user has saved data."""
         rows = self.db.execute_query("""

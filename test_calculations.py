@@ -10,6 +10,7 @@ Tests verify year-by-year projection accuracy across multiple scenarios includin
 - Investment returns
 - Required Minimum Distributions (RMDs)
 - One-time events
+- Historical data integration from snapshots
 
 Uses both specific scenario tests and property-based testing with hypothesis.
 """
@@ -28,7 +29,11 @@ from calculations import (
     calculate_rmd_amount,
     get_rmd_starting_age,
     calculate_conservative_retirement_balance,
+    generate_historical_rows,
 )
+from user_data import UserDataManager
+import tempfile
+import os
 
 
 # ============================================================================
@@ -1563,6 +1568,401 @@ class TestCanContributeFunction:
         # Retired, with continue flag
         assert can_contribute("taxable_brokerage", 70, 65, True) == True
         assert can_contribute("taxable_brokerage", 90, 65, True) == True
+
+
+# ============================================================================
+# HISTORICAL DATA TESTS - New Functionality
+# ============================================================================
+
+
+class TestGenerateHistoricalRows:
+    """Test generation of historical projection rows from snapshot data"""
+    
+    def test_single_historical_year(self):
+        """Test generation of one historical year"""
+        historical_summaries = [
+            {
+                'calendar_year': 2024,
+                'total_value': 150000,
+                'total_contributions': 10000,
+                'total_growth': 8000,
+                'annualized_roi': 0.06
+            }
+        ]
+        
+        rows = generate_historical_rows(historical_summaries, current_age=45, current_year=2026)
+        
+        assert len(rows) == 1
+        assert rows[0]['year'] == 2024
+        assert rows[0]['age'] == 43  # 2024 - (2026 - 45) = 2024 - 1981 = 43
+        assert rows[0]['total_portfolio'] == 150000
+        assert rows[0]['investment_contributions'] == 10000
+        assert rows[0]['total_investment_returns'] == 8000
+        assert rows[0]['investment_roi'] == 0.06
+        assert rows[0]['work_income'] is None
+        assert rows[0]['total_expenses'] is None
+        assert rows[0]['portfolio_depleted'] == False
+    
+    def test_multiple_historical_years(self):
+        """Test generation of multiple historical years"""
+        historical_summaries = [
+            {
+                'calendar_year': 2023,
+                'total_value': 120000,
+                'total_contributions': 8000,
+                'total_growth': 6000,
+                'annualized_roi': 0.055
+            },
+            {
+                'calendar_year': 2024,
+                'total_value': 150000,
+                'total_contributions': 10000,
+                'total_growth': 12000,
+                'annualized_roi': 0.10
+            },
+            {
+                'calendar_year': 2025,
+                'total_value': 180000,
+                'total_contributions': 12000,
+                'total_growth': 8000,
+                'annualized_roi': 0.053
+            }
+        ]
+        
+        rows = generate_historical_rows(historical_summaries, current_age=50, current_year=2026)
+        
+        assert len(rows) == 3
+        # Check chronological ordering is preserved
+        assert rows[0]['year'] == 2023
+        assert rows[1]['year'] == 2024
+        assert rows[2]['year'] == 2025
+        # Check ages increment correctly
+        assert rows[0]['age'] == 47
+        assert rows[1]['age'] == 48
+        assert rows[2]['age'] == 49
+        # Check portfolio values
+        assert rows[0]['total_portfolio'] == 120000
+        assert rows[1]['total_portfolio'] == 150000
+        assert rows[2]['total_portfolio'] == 180000
+    
+    def test_empty_historical_data(self):
+        """Test with no historical data"""
+        rows = generate_historical_rows([], current_age=45, current_year=2026)
+        assert len(rows) == 0
+        assert rows == []
+    
+    def test_row_structure_matches_projection(self):
+        """Ensure historical rows have all required fields for projection compatibility"""
+        historical_summaries = [{
+            'calendar_year': 2024,
+            'total_value': 100000,
+            'total_contributions': 5000,
+            'total_growth': 3000,
+            'annualized_roi': 0.04
+        }]
+        
+        rows = generate_historical_rows(historical_summaries, current_age=40)
+        row = rows[0]
+        
+        # Check all required fields exist
+        required_fields = [
+            'year', 'age', 'work_income', 'ss_income', 'total_income',
+            'core_expenses', 'flex_expenses_full', 'flex_multiplier', 'flex_expenses_actual',
+            'event_amount', 'event_description', 'event_account',
+            'total_expenses', 'surplus_deficit', 'investment_contributions',
+            'contribution_shortfall', 'total_rmds', 'total_withdrawals',
+            'total_investment_returns', 'investment_roi', 'total_portfolio', 'portfolio_depleted'
+        ]
+        
+        for field in required_fields:
+            assert field in row, f"Missing required field: {field}"
+
+
+class TestUserDataHistoricalSummaries:
+    """Test UserDataManager.get_historical_year_summaries()"""
+    
+    @pytest.fixture
+    def manager(self):
+        """Create a UserDataManager and clean up test data"""
+        manager = UserDataManager()
+        
+        # Clean up any existing test user data
+        username = 'test_snapshots_user'
+        try:
+            # Delete any existing snapshots
+            manager.db.execute_update(
+                "DELETE FROM account_snapshots WHERE username = ?",
+                (username,)
+            )
+            # Delete any existing profile/accounts/expenses/events
+            manager.db.execute_update("DELETE FROM user_events WHERE username = ?", (username,))
+            manager.db.execute_update("DELETE FROM user_expenses WHERE username = ?", (username,))
+            manager.db.execute_update("DELETE FROM user_accounts WHERE username = ?", (username,))
+            manager.db.execute_update("DELETE FROM user_profiles WHERE username = ?", (username,))
+        except Exception:
+            pass  # Might not exist yet
+        
+        yield manager, username
+        
+        # Cleanup after test
+        try:
+            manager.db.execute_update("DELETE FROM account_snapshots WHERE username = ?", (username,))
+            manager.db.execute_update("DELETE FROM user_events WHERE username = ?", (username,))
+            manager.db.execute_update("DELETE FROM user_expenses WHERE username = ?", (username,))
+            manager.db.execute_update("DELETE FROM user_accounts WHERE username = ?", (username,))
+            manager.db.execute_update("DELETE FROM user_profiles WHERE username = ?", (username,))
+        except Exception:
+            pass
+    
+    def test_no_snapshots_returns_empty_list(self, manager):
+        """Test with user who has no snapshots"""
+        manager, username = manager
+        
+        summaries = manager.get_historical_year_summaries(username)
+        
+        assert summaries == []
+        assert isinstance(summaries, list)
+    
+    def test_single_year_single_account(self, manager):
+        """Test aggregation with one account, one year"""
+        manager, username = manager
+        
+        # Add snapshots for 2024
+        manager.save_snapshot(username, '401k', '2024-01-01', 0, 100000)
+        manager.save_snapshot(username, '401k', '2024-12-31', 10000, 118000)
+        
+        summaries = manager.get_historical_year_summaries(username)
+        
+        assert len(summaries) == 1
+        assert summaries[0]['calendar_year'] == 2024
+        assert summaries[0]['total_value'] == 118000
+        assert summaries[0]['total_contributions'] == 10000
+        # Growth = 118000 - 100000 - 10000 = 8000
+        assert summaries[0]['total_growth'] == 8000
+        # ROI = 8000 / 100000 = 0.08
+        assert abs(summaries[0]['annualized_roi'] - 0.08) < 0.001
+    
+    def test_multiple_accounts_same_year(self, manager):
+        """Test aggregation across multiple accounts in same year"""
+        manager, username = manager
+        
+        # Starting balances (implicit from first snapshot)
+        # 401k: 200000
+        # Roth IRA: 50000
+        # Total: 250000
+        
+        # Year 2024 snapshots
+        manager.save_snapshot(username, '401k', '2024-01-01', 0, 200000)
+        manager.save_snapshot(username, '401k', '2024-12-31', 20000, 234000)
+        
+        manager.save_snapshot(username, 'Roth IRA', '2024-01-01', 0, 50000)
+        manager.save_snapshot(username, 'Roth IRA', '2024-12-31', 7000, 61000)
+        
+        summaries = manager.get_historical_year_summaries(username)
+        
+        assert len(summaries) == 1
+        assert summaries[0]['calendar_year'] == 2024
+        # Total value = 234000 + 61000 = 295000
+        assert summaries[0]['total_value'] == 295000
+        # Total contributions = 20000 + 7000 = 27000
+        assert summaries[0]['total_contributions'] == 27000
+        # Growth = 295000 - 250000 - 27000 = 18000
+        assert summaries[0]['total_growth'] == 18000
+        # ROI = 18000 / 250000 = 0.072
+        assert abs(summaries[0]['annualized_roi'] - 0.072) < 0.001
+    
+    def test_multiple_years_progression(self, manager):
+        """Test multi-year progression with carry-forward balances"""
+        manager, username = manager
+        
+        # 2023: Start with 100k, contribute 10k, end with 118k (8k growth)
+        manager.save_snapshot(username, '401k', '2023-01-01', 0, 100000)
+        manager.save_snapshot(username, '401k', '2023-12-31', 10000, 118000)
+        
+        # 2024: Start with 118k, contribute 12k, end with 140k (10k growth)
+        manager.save_snapshot(username, '401k', '2024-12-31', 12000, 140000)
+        
+        # 2025: Start with 140k, contribute 15k, end with 165k (10k growth)
+        manager.save_snapshot(username, '401k', '2025-12-31', 15000, 165000)
+        
+        summaries = manager.get_historical_year_summaries(username)
+        
+        assert len(summaries) == 3
+        
+        # 2023
+        assert summaries[0]['calendar_year'] == 2023
+        assert summaries[0]['total_value'] == 118000
+        assert summaries[0]['total_contributions'] == 10000
+        assert summaries[0]['total_growth'] == 8000
+        assert abs(summaries[0]['annualized_roi'] - 0.08) < 0.001
+        
+        # 2024 (starting from 2023 ending balance)
+        assert summaries[1]['calendar_year'] == 2024
+        assert summaries[1]['total_value'] == 140000
+        assert summaries[1]['total_contributions'] == 12000
+        assert summaries[1]['total_growth'] == 10000
+        assert abs(summaries[1]['annualized_roi'] - (10000/118000)) < 0.001
+        
+        # 2025
+        assert summaries[2]['calendar_year'] == 2025
+        assert summaries[2]['total_value'] == 165000
+        assert summaries[2]['total_contributions'] == 15000
+        assert summaries[2]['total_growth'] == 10000
+        assert abs(summaries[2]['annualized_roi'] - (10000/140000)) < 0.001
+    
+    def test_multiple_snapshots_per_year_aggregation(self, manager):
+        """Test that multiple snapshots in same year are properly aggregated"""
+        manager, username = manager
+        
+        # Multiple contributions throughout 2024
+        manager.save_snapshot(username, '401k', '2024-01-01', 0, 100000)
+        manager.save_snapshot(username, '401k', '2024-03-31', 5000, 108000)
+        manager.save_snapshot(username, '401k', '2024-06-30', 5000, 118000)
+        manager.save_snapshot(username, '401k', '2024-12-31', 10000, 133000)
+        
+        summaries = manager.get_historical_year_summaries(username)
+        
+        assert len(summaries) == 1
+        assert summaries[0]['calendar_year'] == 2024
+        # Total contributions = 5000 + 5000 + 10000 = 20000
+        assert summaries[0]['total_contributions'] == 20000
+        # End value should be from last snapshot
+        assert summaries[0]['total_value'] == 133000
+        # Growth = 133000 - 100000 - 20000 = 13000
+        assert summaries[0]['total_growth'] == 13000
+    
+    def test_roi_calculation_with_zero_starting_balance(self, manager):
+        """Test ROI calculation when starting from zero"""
+        manager, username = manager
+        
+        # First year starting from zero
+        manager.save_snapshot(username, '401k', '2024-01-01', 0, 0)
+        manager.save_snapshot(username, '401k', '2024-12-31', 10000, 10500)
+        
+        summaries = manager.get_historical_year_summaries(username)
+        
+        assert len(summaries) == 1
+        # With starting balance of 0, ROI should be 1.0 (100%) if there's positive growth
+        # Growth = 10500 - 0 - 10000 = 500
+        assert summaries[0]['total_growth'] == 500
+        assert summaries[0]['annualized_roi'] == 1.0
+
+
+class TestProjectionWithHistoricalData:
+    """Test integration of historical data into projections"""
+    
+    def test_projection_with_historical_data(self):
+        """Test that historical data is prepended to projections"""
+        # Create historical summaries for 2024-2025
+        historical_summaries = [
+            {
+                'calendar_year': 2024,
+                'total_value': 150000,
+                'total_contributions': 10000,
+                'total_growth': 8000,
+                'annualized_roi': 0.06
+            },
+            {
+                'calendar_year': 2025,
+                'total_value': 170000,
+                'total_contributions': 12000,
+                'total_growth': 8000,
+                'annualized_roi': 0.053
+            }
+        ]
+        
+        # Run projection starting in 2026
+        result = run_comprehensive_projection(
+            current_age=45,
+            target_age=50,
+            current_work_income=100000,
+            work_end_age=65,
+            ss_start_age=67,
+            ss_monthly_benefit=2500,
+            accounts=[AccountBucket("401k", 170000, 0.07, 1, "401k", 20000)],
+            expense_categories=[ExpenseCategory("Living", 60000, "CORE")],
+            historical_summaries=historical_summaries
+        )
+        
+        # Should have 2 historical rows + projection rows
+        assert len(result) > 2
+        
+        # First two rows should be historical
+        assert result.iloc[0]['year'] == 2024
+        assert result.iloc[0]['age'] == 43
+        assert result.iloc[0]['total_portfolio'] == 150000
+        assert pd.isna(result.iloc[0]['work_income'])  # Historical row has no income data
+        
+        assert result.iloc[1]['year'] == 2025
+        assert result.iloc[1]['age'] == 44
+        assert result.iloc[1]['total_portfolio'] == 170000
+        
+        # Subsequent rows should be normal projections starting at 2026
+        assert result.iloc[2]['year'] == 2026
+        assert result.iloc[2]['age'] == 45
+        assert not pd.isna(result.iloc[2]['work_income'])  # Projection has income data
+    
+    def test_investment_roi_column_exists(self):
+        """Test that investment_roi column is added to all rows"""
+        historical_summaries = [{
+            'calendar_year': 2024,
+            'total_value': 100000,
+            'total_contributions': 5000,
+            'total_growth': 4000,
+            'annualized_roi': 0.045
+        }]
+        
+        result = run_comprehensive_projection(
+            current_age=45,
+            target_age=48,
+            current_work_income=80000,
+            work_end_age=65,
+            ss_start_age=67,
+            ss_monthly_benefit=2000,
+            accounts=[
+                AccountBucket("401k", 50000, 0.08, 1, "401k", 10000),
+                AccountBucket("Roth", 30000, 0.07, 2, "roth_ira", 7000)
+            ],
+            expense_categories=[ExpenseCategory("Living", 40000, "CORE")],
+            historical_summaries=historical_summaries
+        )
+        
+        # Check that investment_roi column exists
+        assert 'investment_roi' in result.columns
+        
+        # Historical row should have actual ROI
+        assert result.iloc[0]['investment_roi'] == 0.045
+        
+        # Projection rows should have weighted average ROI
+        # 401k: 50000 at 8%, Roth: 30000 at 7%
+        # Weighted = (50000*0.08 + 30000*0.07) / 80000 = (4000 + 2100) / 80000 = 0.07625
+        for i in range(1, len(result)):
+            assert result.iloc[i]['investment_roi'] > 0
+            # Should be somewhere between 7% and 8%
+            assert 0.06 < result.iloc[i]['investment_roi'] < 0.09
+    
+    def test_projection_without_historical_data(self):
+        """Test that projection works normally without historical data"""
+        result = run_comprehensive_projection(
+            current_age=45,
+            target_age=48,
+            current_work_income=80000,
+            work_end_age=65,
+            ss_start_age=67,
+            ss_monthly_benefit=2000,
+            accounts=[AccountBucket("401k", 100000, 0.07, 1, "401k", 10000)],
+            expense_categories=[ExpenseCategory("Living", 50000, "CORE")],
+            historical_summaries=None  # No historical data
+        )
+        
+        # Should work normally, starting at current age
+        assert result.iloc[0]['age'] == 45
+        assert result.iloc[0]['year'] == 2026
+        assert not pd.isna(result.iloc[0]['work_income'])
+        
+        # ROI column should still exist with weighted values
+        assert 'investment_roi' in result.columns
+        assert result.iloc[0]['investment_roi'] == 0.07
 
 
 if __name__ == "__main__":

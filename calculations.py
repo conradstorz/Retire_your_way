@@ -163,6 +163,63 @@ def can_contribute(account_type: str, age: int, work_end_age: int, continue_post
     return age < rule
 
 
+def generate_historical_rows(
+    historical_summaries: List[Dict],
+    current_age: int,
+    current_year: int = 2026
+) -> List[Dict]:
+    """
+    Generate projection-compatible rows from historical snapshot data.
+    
+    Args:
+        historical_summaries: List of yearly summaries from UserDataManager.get_historical_year_summaries()
+        current_age: User's current age
+        current_year: Current calendar year (default 2026)
+    
+    Returns:
+        List of dictionaries with same structure as projection rows
+    """
+    birth_year = current_year - current_age
+    historical_rows = []
+    
+    for summary in historical_summaries:
+        calendar_year = summary['calendar_year']
+        
+        # Calculate age at end of this historical year
+        age_at_year = calendar_year - birth_year
+        
+        # Create a row with the same structure as projection rows
+        # Most fields are NaN/None since we don't have historical income/expense data
+        row = {
+            'year': calendar_year,
+            'age': age_at_year,
+            'work_income': None,
+            'ss_income': None,
+            'total_income': None,
+            'core_expenses': None,
+            'flex_expenses_full': None,
+            'flex_multiplier': None,
+            'flex_expenses_actual': None,
+            'event_amount': None,
+            'event_description': '',
+            'event_account': '',
+            'total_expenses': None,
+            'surplus_deficit': None,
+            'investment_contributions': summary['total_contributions'],
+            'contribution_shortfall': 0,
+            'total_rmds': None,
+            'total_withdrawals': None,
+            'total_investment_returns': summary['total_growth'],
+            'investment_roi': summary['annualized_roi'],  # Actual historical ROI
+            'total_portfolio': summary['total_value'],
+            'portfolio_depleted': False
+        }
+        
+        historical_rows.append(row)
+    
+    return historical_rows
+
+
 def run_comprehensive_projection(
     # Personal info
     current_age: int,
@@ -188,7 +245,8 @@ def run_comprehensive_projection(
     events: Optional[List[OneTimeEvent]] = None,
     inflation_rate: float = 0.03,
     max_age: int = 110,
-    ultimate_max_age: int = 110
+    ultimate_max_age: int = 110,
+    historical_summaries: Optional[List[Dict]] = None
 ) -> pd.DataFrame:
     """
     Year-by-year retirement projection.
@@ -205,12 +263,16 @@ def run_comprehensive_projection(
         target_age: The retirement goal age (used for analysis, not projection end)
         ultimate_max_age: The maximum age to project to (default 110)
         max_age: Deprecated, use ultimate_max_age instead
+        historical_summaries: Optional list of historical year summaries from snapshots
 
     Returns:
-        DataFrame with one row per year of the projection.
+        DataFrame with one row per year of the projection, with historical data prepended.
     """
     if events is None:
         events = []
+    
+    if historical_summaries is None:
+        historical_summaries = []
 
     # Use ultimate_max_age for projection length (fall back to max_age for backward compatibility)
     end_age = ultimate_max_age if ultimate_max_age != 110 else max_age
@@ -221,6 +283,11 @@ def run_comprehensive_projection(
     current_year = 2026  # Base year for projections
     birth_year = current_year - current_age
     rmd_starting_age = get_rmd_starting_age(birth_year)
+    
+    # Generate historical rows if we have snapshot data
+    if historical_summaries:
+        historical_rows = generate_historical_rows(historical_summaries, current_age, current_year)
+        results.extend(historical_rows)
 
     # Sort accounts by priority for withdrawal ordering
     sorted_accounts = sorted(accounts, key=lambda a: a.priority)
@@ -486,6 +553,18 @@ def run_comprehensive_projection(
 
         total_portfolio = sum(account_balances.values())
         portfolio_depleted = total_portfolio <= 0
+        
+        # --- CALCULATE WEIGHTED AVERAGE ROI FOR PROJECTIONS ---
+        # Weighted average of account returns based on balance at start of year (before returns)
+        total_balance_before_returns = sum(account_balances[acc.name] - returns[acc.name] for acc in accounts)
+        
+        if total_balance_before_returns > 0:
+            weighted_roi = sum(
+                ((account_balances[acc.name] - returns[acc.name]) / total_balance_before_returns) * acc.annual_return
+                for acc in accounts
+            )
+        else:
+            weighted_roi = 0
 
         # --- RECORD YEAR ---
 
@@ -509,6 +588,7 @@ def run_comprehensive_projection(
             'total_rmds': total_rmds,
             'total_withdrawals': total_withdrawals,
             'total_investment_returns': total_investment_returns,
+            'investment_roi': weighted_roi,  # Add projected ROI column
             'total_portfolio': total_portfolio,
             'portfolio_depleted': portfolio_depleted
         }
