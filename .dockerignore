@@ -1,0 +1,36 @@
+# Git
+.git
+.gitignore
+
+# Python cache/build artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.hypothesis/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE/editor
+.vscode/
+.idea/
+
+# Local/secrets/data files
+.streamlit/secrets.toml
+credentials.yaml
+user_data.db
+*.db
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Optional docs and local notes not required at runtime
+TEST_*.md
+docs/

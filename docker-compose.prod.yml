@@ -1,0 +1,13 @@
+services:
+  app:
+    image: ${IMAGE:-ghcr.io/conradstorz/retire_your_way:latest}
+    pull_policy: always
+    container_name: retirement-planner-prod
+    ports:
+      - "8501:8501"
+    environment:
+      PORT: "8501"
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      STREAMLIT_SERVER_HEADLESS: "true"
+      STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
+    restart: unless-stopped

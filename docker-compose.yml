@@ -1,0 +1,57 @@
+services:
+  app:
+    build:
+      context: .
+    image: retirement-planner:local
+    container_name: retirement-planner
+    ports:
+      - "8501:8501"
+    environment:
+      PORT: "8501"
+      SQLITE_DB_PATH: /data/user_data.db
+    volumes:
+      - ./:/app
+      - app_data:/data
+    command: streamlit run app.py --server.port=8501 --server.address=0.0.0.0
+    restart: unless-stopped
+
+  app-cloud-parity:
+    build:
+      context: .
+    image: retirement-planner:postgres-local
+    container_name: retirement-planner-postgres
+    profiles: ["postgres"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8502:8501"
+    environment:
+      PORT: "8501"
+      DATABASE_URL: postgresql://retire_user:retire_pass@postgres:5432/retire_db
+    volumes:
+      - ./:/app
+    command: streamlit run app.py --server.port=8501 --server.address=0.0.0.0
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: retirement-planner-db
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_DB: retire_db
+      POSTGRES_USER: retire_user
+      POSTGRES_PASSWORD: retire_pass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U retire_user -d retire_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  app_data:
+  postgres_data:

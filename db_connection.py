@@ -93,8 +93,8 @@ class DatabaseConnection:
                     'password': parsed.password
                 }
         
-        # SQLite default
-        return {'database': 'user_data.db'}
+        # SQLite default (overridable for containerized deployments)
+        return {'database': os.getenv('SQLITE_DB_PATH', 'user_data.db')}
     
     @contextmanager
     def get_connection(self):

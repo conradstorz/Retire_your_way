@@ -46,6 +46,7 @@ nul
 
 # Streamlit
 .streamlit/secrets.toml
+.env.production
 
 # User data and credentials
 credentials.yaml

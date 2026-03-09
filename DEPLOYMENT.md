@@ -4,7 +4,21 @@ This guide covers deploying your Retirement Planning App with persistent storage
 
 ## 🎯 Quick Start
 
-**Local Development**: No configuration needed - just run:
+**Local Development (Docker + WSL2 recommended)**:
+```bash
+docker compose up --build
+```
+
+Open `http://localhost:8501`
+
+**Cloud-Parity Local Testing (PostgreSQL)**:
+```bash
+docker compose --profile postgres up --build
+```
+
+Open `http://localhost:8502`
+
+**Local Development (without Docker)**: No configuration needed - just run:
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
@@ -195,17 +209,81 @@ streamlit run app.py --server.address 0.0.0.0 --server.port 8501
 
 ## 🐳 Docker Deployment
 
-For containerized deployment (any platform):
+For containerized deployment from GitHub (local, VPS, Render, Railway, Fly, etc.), build the image and run with environment variables.
 
-**Dockerfile is included** - see `Dockerfile` for details.
+### Build Image
 
-Build and run:
 ```bash
-docker build -t retirement-planner .
-docker run -p 8501:8501 -v $(pwd)/data:/app/data retirement-planner
+docker build -t retirement-planner:latest .
 ```
 
-**Note**: Mount a volume for persistent storage!
+### Run with Local SQLite Persistence
+
+```bash
+docker run --rm -p 8501:8501 \
+   -e PORT=8501 \
+   -e SQLITE_DB_PATH=/data/user_data.db \
+   -v retirement_planner_data:/data \
+   retirement-planner:latest
+```
+
+### Run in Cloud with PostgreSQL
+
+```bash
+docker run --rm -p 8501:8501 \
+   -e PORT=8501 \
+   -e DATABASE_URL='postgresql://user:password@host:5432/database' \
+   retirement-planner:latest
+```
+
+### Run Directly from GitHub Source
+
+```bash
+git clone https://github.com/conradstorz/Retire_your_way.git
+cd Retire_your_way
+docker build -t retirement-planner:latest .
+docker run --rm -p 8501:8501 \
+   -e PORT=8501 \
+   -e DATABASE_URL='postgresql://user:password@host:5432/database' \
+   retirement-planner:latest
+```
+
+**Notes**:
+- Use `DATABASE_URL` in cloud environments for true persistent storage.
+- The container honors `PORT` for platforms that inject dynamic ports.
+- For local development, `docker-compose.yml` is the fastest workflow.
+
+### Production: Pull and Run from GitHub (Recommended)
+
+This repo includes a GitHub Actions workflow at `.github/workflows/docker-image.yml`.
+
+What it does:
+- Builds Docker image on push/PR.
+- Runs CI tests before image publish.
+- Publishes image to GHCR on push to `master`/`main` and version tags.
+- Tags include branch, commit SHA, and `latest` on default branch.
+
+Deploy on a cloud VM/server with Docker:
+
+```bash
+git clone https://github.com/conradstorz/Retire_your_way.git
+cd Retire_your_way
+cp .env.production.example .env.production
+# Edit DATABASE_URL (and optionally IMAGE tag)
+docker compose --env-file .env.production -f docker-compose.prod.yml pull
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d
+```
+
+Update deployment after a new GitHub push:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml pull
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d
+```
+
+Rollback to a prior image:
+- Set `IMAGE=` in `.env.production` to a prior tag (for example `:sha-xxxxxxx`).
+- Re-run `docker compose ... up -d`.
 
 ---
 

@@ -91,11 +91,72 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for detailed multi-user setup instruc
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for complete deployment options and instructions.
 
-1. Push this code to a GitHub repository
-2. Go to [share.streamlit.io](https://share.streamlit.io)
-3. Connect your GitHub account
-4. Deploy the app
-5. Share the URL with family/friends - they can use it without installing anything!
+**Option 4: Docker for local development (WSL2-friendly)**
+
+Start with SQLite persistence and live code editing:
+
+```bash
+docker compose up --build
+```
+
+Open: `http://localhost:8501`
+
+Run local cloud-parity mode (PostgreSQL + app):
+
+```bash
+docker compose --profile postgres up --build
+```
+
+Open: `http://localhost:8502`
+
+Stop containers:
+
+```bash
+docker compose down
+docker compose --profile postgres down
+```
+
+**Option 5: Run production-style Docker image**
+
+```bash
+docker build -t retirement-planner:latest .
+docker run --rm -p 8501:8501 \
+    -e PORT=8501 \
+    -e SQLITE_DB_PATH=/data/user_data.db \
+    -v retirement_planner_data:/data \
+    retirement-planner:latest
+```
+
+For cloud container platforms, configure PostgreSQL via `DATABASE_URL`:
+
+```bash
+docker run --rm -p 8501:8501 \
+    -e PORT=8501 \
+    -e DATABASE_URL='postgresql://user:password@host:5432/database' \
+    retirement-planner:latest
+```
+
+**Option 6: Auto-build image from GitHub + deploy with Compose (cloud-ready)**
+
+This repository now includes:
+- `.github/workflows/docker-image.yml` (builds and publishes image to GHCR)
+- `docker-compose.prod.yml` (pull-and-run production service)
+- `.env.production.example` (environment template)
+
+The Docker publish pipeline runs tests first. Images are only pushed when the CI test job passes.
+
+Production server workflow:
+
+```bash
+git clone https://github.com/conradstorz/Retire_your_way.git
+cd Retire_your_way
+cp .env.production.example .env.production
+# edit .env.production with your real DATABASE_URL
+docker compose --env-file .env.production -f docker-compose.prod.yml pull
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d
+```
+
+After pushing to `master`/`main`, GitHub Actions publishes a new image automatically.
 
 ## Project Structure
 
