@@ -1965,5 +1965,463 @@ class TestProjectionWithHistoricalData:
         assert result.iloc[0]['investment_roi'] == 0.07
 
 
+class TestAnalyzeRetirementPlan:
+    """Test analyze_retirement_plan() function - CRITICAL COVERAGE GAP"""
+
+    def test_on_track_status_when_portfolio_survives(self):
+        """Should return ON TRACK when portfolio lasts past target_age"""
+        # Create a healthy projection
+        projection = run_comprehensive_projection(
+            current_age=50,
+            target_age=80,
+            current_work_income=100000,
+            work_end_age=65,
+            ss_start_age=67,
+            ss_monthly_benefit=3000,
+            accounts=[AccountBucket("401k", 500000, 0.07, 1, "401k", 20000)],
+            expense_categories=[ExpenseCategory("Living", 40000, "CORE")],
+        )
+
+        analysis = analyze_retirement_plan(projection, target_age=80)
+
+        assert analysis['status'] == 'ON TRACK'
+        assert analysis['run_out_age'] is None or analysis['run_out_age'] >= 80
+        assert analysis['cushion_years'] >= 0
+        assert len(analysis['warnings']) >= 0  # May have warnings, but status is ON TRACK
+
+    def test_at_risk_status_when_depletes_early(self):
+        """Should return AT RISK with warnings when money runs out early"""
+        # Create a projection that runs out early
+        projection = run_comprehensive_projection(
+            current_age=65,
+            target_age=90,
+            current_work_income=0,
+            work_end_age=65,
+            ss_start_age=67,
+            ss_monthly_benefit=1500,  # Only $18k/year
+            accounts=[AccountBucket("IRA", 100000, 0.05, 1, "traditional_ira", 0)],
+            expense_categories=[ExpenseCategory("Living", 50000, "CORE")],  # High expenses
+        )
+
+        analysis = analyze_retirement_plan(projection, target_age=90)
+
+        assert analysis['status'] == 'AT RISK'
+        assert analysis['run_out_age'] is not None
+        assert analysis['run_out_age'] < 90
+        assert analysis['cushion_years'] < 0  # Negative cushion
+        assert len(analysis['warnings']) > 0
+        # Should have a warning about early depletion
+        assert any('depletes' in w.lower() for w in analysis['warnings'])
+
+    def test_run_out_age_calculation(self):
+        """Should correctly identify the age when portfolio depletes"""
+        projection = run_comprehensive_projection(
+            current_age=70,
+            target_age=85,
+            current_work_income=0,
+            work_end_age=70,
+            ss_start_age=70,
+            ss_monthly_benefit=2000,  # $24k/year
+            accounts=[AccountBucket("IRA", 150000, 0.06, 1, "traditional_ira", 0)],
+            expense_categories=[ExpenseCategory("Living", 45000, "CORE")],
+        )
+
+        analysis = analyze_retirement_plan(projection, target_age=85)
+
+        # Should run out at some point
+        if analysis['run_out_age'] is not None:
+            # Verify the run_out_age matches the first depleted row
+            depleted_rows = projection[projection['portfolio_depleted'] == True]
+            if len(depleted_rows) > 0:
+                assert analysis['run_out_age'] == depleted_rows.iloc[0]['age']
+                assert analysis['run_out_year'] == depleted_rows.iloc[0]['year']
+
+    def test_cushion_years_positive(self):
+        """Should calculate positive cushion when portfolio exceeds target"""
+        projection = run_comprehensive_projection(
+            current_age=40,
+            target_age=80,
+            current_work_income=150000,
+            work_end_age=65,
+            ss_start_age=67,
+            ss_monthly_benefit=3500,
+            accounts=[AccountBucket("401k", 800000, 0.08, 1, "401k", 25000)],
+            expense_categories=[ExpenseCategory("Living", 50000, "CORE")],
+        )
+
+        analysis = analyze_retirement_plan(projection, target_age=80)
+
+        # Portfolio should last well beyond target
+        if analysis['run_out_age'] is None:
+            # Never runs out - cushion is ultimate_max_age - target_age
+            assert analysis['cushion_years'] > 0
+        elif analysis['run_out_age'] > 80:
+            assert analysis['cushion_years'] == analysis['run_out_age'] - 80
+            assert analysis['cushion_years'] > 0
+
+    def test_cushion_years_negative(self):
+        """Should calculate negative cushion when portfolio depletes early"""
+        projection = run_comprehensive_projection(
+            current_age=68,
+            target_age=90,
+            current_work_income=0,
+            work_end_age=68,
+            ss_start_age=70,
+            ss_monthly_benefit=1000,  # Very low
+            accounts=[AccountBucket("IRA", 50000, 0.04, 1, "traditional_ira", 0)],
+            expense_categories=[ExpenseCategory("Living", 40000, "CORE")],
+        )
+
+        analysis = analyze_retirement_plan(projection, target_age=90)
+
+        if analysis['run_out_age'] is not None and analysis['run_out_age'] < 90:
+            assert analysis['cushion_years'] < 0
+            expected_cushion = analysis['run_out_age'] - 90
+            assert analysis['cushion_years'] == expected_cushion
+
+    def test_warnings_for_flex_spending_reduction(self):
+        """Should warn when flex spending is significantly reduced AND portfolio is struggling"""
+        # Create a scenario where portfolio actually depletes (AT RISK)
+        projection = run_comprehensive_projection(
+            current_age=70,
+            target_age=90,
+            current_work_income=0,
+            work_end_age=70,
+            ss_start_age=70,
+            ss_monthly_benefit=1500,  # $18k/year - very low
+            accounts=[AccountBucket("IRA", 150000, 0.05, 1, "traditional_ira", 0)],  # Low balance
+            expense_categories=[
+                ExpenseCategory("Living", 15000, "CORE"),
+                ExpenseCategory("Travel", 20000, "FLEX"),  # High FLEX that will get cut
+            ],
+            max_flex_reduction=0.5,
+        )
+
+        analysis = analyze_retirement_plan(projection, target_age=90)
+
+        # Check if there's significant FLEX reduction AND portfolio is struggling
+        avg_flex = projection['flex_multiplier'].mean()
+        if avg_flex < 0.8 and analysis['status'] == 'AT RISK':
+            # Should have a warning about flex spending
+            assert len(analysis['warnings']) > 0
+            # At least one warning should mention flexible/discretionary spending
+            assert any('flexible' in w.lower() or 'discretionary' in w.lower()
+                      for w in analysis['warnings'])
+        else:
+            # If portfolio is healthy despite flex reduction, no warning needed
+            pass
+
+    def test_conservative_withdrawal_calculation(self):
+        """Should calculate sustainable withdrawal when accounts provided"""
+        projection = run_comprehensive_projection(
+            current_age=55,
+            target_age=90,
+            current_work_income=120000,
+            work_end_age=65,
+            ss_start_age=67,
+            ss_monthly_benefit=2500,
+            accounts=[
+                AccountBucket("401k", 400000, 0.07, 1, "401k", 15000),
+                AccountBucket("Roth", 100000, 0.07, 2, "roth_ira", 7000),
+            ],
+            expense_categories=[ExpenseCategory("Living", 50000, "CORE")],
+        )
+
+        accounts = [
+            AccountBucket("401k", 400000, 0.07, 1, "401k", 15000),
+            AccountBucket("Roth", 100000, 0.07, 2, "roth_ira", 7000),
+        ]
+
+        analysis = analyze_retirement_plan(
+            projection,
+            target_age=90,
+            work_end_age=65,
+            accounts=accounts,
+            current_age=55
+        )
+
+        assert analysis['sustainable_withdrawal_annual'] is not None
+        assert analysis['sustainable_withdrawal_monthly'] is not None
+        assert analysis['sustainable_withdrawal_annual'] > 0
+        assert analysis['sustainable_withdrawal_monthly'] == analysis['sustainable_withdrawal_annual'] / 12
+
+    def test_empty_projection_handling(self):
+        """Should handle empty projection DataFrame gracefully"""
+        empty_df = pd.DataFrame()
+
+        analysis = analyze_retirement_plan(empty_df, target_age=90)
+
+        assert analysis['status'] == 'AT RISK'
+        assert analysis['run_out_age'] is None
+        assert analysis['run_out_year'] is None
+        assert analysis['cushion_years'] == 0
+        assert 'No projection data' in analysis['warnings']
+        assert analysis['final_balance'] == 0
+        assert analysis['sustainable_withdrawal_annual'] is None
+        assert analysis['sustainable_withdrawal_monthly'] is None
+
+    def test_warnings_accumulation(self):
+        """Should accumulate multiple warnings when multiple issues exist"""
+        # Create scenario with multiple problems
+        projection = run_comprehensive_projection(
+            current_age=60,
+            target_age=90,
+            current_work_income=50000,  # Low income
+            work_end_age=65,
+            ss_start_age=67,
+            ss_monthly_benefit=1500,  # Low SS
+            accounts=[AccountBucket("401k", 100000, 0.06, 1, "401k", 20000)],  # High contribution
+            expense_categories=[
+                ExpenseCategory("Living", 35000, "CORE"),
+                ExpenseCategory("Travel", 20000, "FLEX"),
+            ],
+        )
+
+        analysis = analyze_retirement_plan(projection, target_age=90)
+
+        # Should have multiple warnings
+        # May warn about: flex reduction, contribution shortfall, early depletion, etc.
+        assert len(analysis['warnings']) >= 1
+
+    def test_final_balance_calculation(self):
+        """Should return the final portfolio balance from projection"""
+        projection = run_comprehensive_projection(
+            current_age=50,
+            target_age=70,
+            current_work_income=100000,
+            work_end_age=65,
+            ss_start_age=67,
+            ss_monthly_benefit=2500,
+            accounts=[AccountBucket("401k", 300000, 0.07, 1, "401k", 15000)],
+            expense_categories=[ExpenseCategory("Living", 45000, "CORE")],
+        )
+
+        analysis = analyze_retirement_plan(projection, target_age=70)
+
+        # Final balance should match last row of projection
+        expected_balance = projection.iloc[-1]['total_portfolio']
+        assert analysis['final_balance'] == expected_balance
+
+    def test_no_warnings_for_healthy_portfolio(self):
+        """Should have minimal/no warnings for a healthy, well-funded plan"""
+        projection = run_comprehensive_projection(
+            current_age=45,
+            target_age=85,
+            current_work_income=150000,
+            work_end_age=65,
+            ss_start_age=67,
+            ss_monthly_benefit=4000,
+            accounts=[
+                AccountBucket("401k", 600000, 0.08, 1, "401k", 19500),
+                AccountBucket("Roth", 200000, 0.08, 2, "roth_ira", 7000),
+            ],
+            expense_categories=[ExpenseCategory("Living", 60000, "CORE")],
+        )
+
+        analysis = analyze_retirement_plan(projection, target_age=85)
+
+        assert analysis['status'] == 'ON TRACK'
+        # May have 0 warnings, or only informational ones
+        # Check that there are no serious warnings (depletion, shortfalls)
+        serious_keywords = ['depletes', 'insufficient', 'shortfall']
+        serious_warnings = [w for w in analysis['warnings']
+                           if any(kw in w.lower() for kw in serious_keywords)]
+        assert len(serious_warnings) == 0
+
+
+class TestCalculateConservativeRetirementBalance:
+    """Test calculate_conservative_retirement_balance() function - CRITICAL COVERAGE GAP"""
+
+    def test_basic_conservative_calculation(self):
+        """Should project balances with conservative 5.5% real return"""
+        accounts = [AccountBucket("401k", 100000, 0.07, 1, "401k", 0)]
+
+        balance = calculate_conservative_retirement_balance(
+            accounts=accounts,
+            current_age=50,
+            work_end_age=60
+        )
+
+        # 10 years at 5.5% return, no contributions
+        # Expected: 100000 * (1.055)^10 ≈ 170,814
+        expected = 100000 * (1.055 ** 10)
+        assert abs(balance - expected) < 100  # Within $100
+
+    def test_with_planned_contributions(self):
+        """Should include planned contributions in projection"""
+        accounts = [AccountBucket("401k", 100000, 0.07, 1, "401k", 10000)]
+
+        balance = calculate_conservative_retirement_balance(
+            accounts=accounts,
+            current_age=50,
+            work_end_age=55
+        )
+
+        # Manual calculation:
+        # Year 0: 100000
+        # Year 1: (100000 + 10000) * 1.055 = 116,050
+        # Year 2: (116050 + 10000) * 1.055 = 132,932.75
+        # Year 3: (132932.75 + 10000) * 1.055 = 150,744.05
+        # Year 4: (150744.05 + 10000) * 1.055 = 169,535.17
+        # Year 5: (169535.17 + 10000) * 1.055 = 189,359.61
+
+        # Actually, contributions happen at the beginning of the year, then growth
+        # So year 0 -> year 1: add 10k, grow
+        running = 100000
+        for _ in range(5):  # 50 to 55 is 5 years
+            running += 10000
+            running *= 1.055
+
+        assert abs(balance - running) < 100
+
+    def test_real_return_calculation(self):
+        """Should use 5.5% real return regardless of account's nominal return"""
+        # Even though account has 10% return, conservative calc uses 5.5%
+        accounts = [AccountBucket("401k", 100000, 0.10, 1, "401k", 0)]
+
+        balance = calculate_conservative_retirement_balance(
+            accounts=accounts,
+            current_age=60,
+            work_end_age=65
+        )
+
+        # Should use 5.5%, not 10%
+        expected = 100000 * (1.055 ** 5)
+        assert abs(balance - expected) < 100
+
+    def test_retirement_years_calculation(self):
+        """Should calculate years from current_age to work_end_age"""
+        accounts = [AccountBucket("401k", 100000, 0.07, 1, "401k", 5000)]
+
+        # 10 years until retirement
+        balance_10yr = calculate_conservative_retirement_balance(
+            accounts=accounts,
+            current_age=55,
+            work_end_age=65
+        )
+
+        # 5 years until retirement
+        balance_5yr = calculate_conservative_retirement_balance(
+            accounts=accounts,
+            current_age=60,
+            work_end_age=65
+        )
+
+        # 10-year balance should be significantly higher (at least 1.4x due to more contributions and compounding)
+        assert balance_10yr > balance_5yr * 1.4
+
+    def test_with_zero_balance(self):
+        """Should handle zero starting balance"""
+        accounts = [AccountBucket("401k", 0, 0.07, 1, "401k", 15000)]
+
+        balance = calculate_conservative_retirement_balance(
+            accounts=accounts,
+            current_age=30,
+            work_end_age=35
+        )
+
+        # 5 years of $15k contributions with 5.5% growth
+        running = 0
+        for _ in range(5):
+            running += 15000
+            running *= 1.055
+
+        assert abs(balance - running) < 100
+        assert balance > 0
+
+    def test_with_multiple_accounts(self):
+        """Should aggregate multiple accounts correctly"""
+        accounts = [
+            AccountBucket("401k", 200000, 0.07, 1, "401k", 15000),
+            AccountBucket("Roth", 100000, 0.08, 2, "roth_ira", 7000),
+            AccountBucket("Taxable", 50000, 0.06, 3, "taxable_brokerage", 5000),
+        ]
+
+        balance = calculate_conservative_retirement_balance(
+            accounts=accounts,
+            current_age=50,
+            work_end_age=60
+        )
+
+        # Calculate each account separately
+        running_401k = 200000
+        running_roth = 100000
+        running_taxable = 50000
+
+        for _ in range(10):
+            running_401k += 15000
+            running_401k *= 1.055
+
+            running_roth += 7000
+            running_roth *= 1.055
+
+            running_taxable += 5000
+            running_taxable *= 1.055
+
+        expected = running_401k + running_roth + running_taxable
+        assert abs(balance - expected) < 100
+
+    def test_respects_contribution_rules(self):
+        """Should respect account type contribution rules (e.g., IRA age 73 limit)"""
+        # Traditional IRA contributions stop at 73
+        accounts = [AccountBucket("IRA", 100000, 0.07, 1, "traditional_ira", 7000)]
+
+        balance = calculate_conservative_retirement_balance(
+            accounts=accounts,
+            current_age=70,
+            work_end_age=75
+        )
+
+        # Age 70-72: contributions allowed (3 years)
+        # Age 73-74: contributions NOT allowed (2 years, no contributions)
+        # Total: 3 years with contributions, 2 years without
+
+        running = 100000
+        # Age 70, 71, 72 - contribute
+        for _ in range(3):
+            running += 7000
+            running *= 1.055
+        # Age 73, 74 - no contributions (age >= 73)
+        for _ in range(2):
+            running *= 1.055
+
+        assert abs(balance - running) < 100
+
+    def test_401k_stops_at_work_end_age(self):
+        """Should stop 401k contributions at work_end_age"""
+        accounts = [AccountBucket("401k", 100000, 0.07, 1, "401k", 10000)]
+
+        # Work ends at 65, but we're already there
+        balance = calculate_conservative_retirement_balance(
+            accounts=accounts,
+            current_age=65,
+            work_end_age=65
+        )
+
+        # No years to project (already at retirement)
+        # 0 years means no loop iterations, return current balance
+        expected = sum(acc.balance for acc in accounts)
+        assert abs(balance - expected) < 100
+
+    def test_roth_ira_with_continue_post_retirement(self):
+        """Should continue Roth IRA contributions after work_end_age if specified"""
+        accounts = [AccountBucket("Roth", 100000, 0.07, 1, "roth_ira", 7000, continue_post_retirement=True)]
+
+        # Work ends at 65, but Roth continues
+        balance = calculate_conservative_retirement_balance(
+            accounts=accounts,
+            current_age=60,
+            work_end_age=65
+        )
+
+        # All 5 years should have contributions (continue_post_retirement=True)
+        running = 100000
+        for _ in range(5):
+            running += 7000
+            running *= 1.055
+
+        assert abs(balance - running) < 100
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

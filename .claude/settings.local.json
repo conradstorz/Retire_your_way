@@ -1,11 +1,13 @@
 {
-  "model": "claude-sonnet-4-5",
   "permissions": {
     "allow": [
       "Bash(python -c:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(ls:*)",
+      "Bash(sed:*)"
     ]
-  }
+  },
+  "model": "claude-sonnet-4-5"
 }
